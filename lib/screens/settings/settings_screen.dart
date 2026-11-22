@@ -11,6 +11,7 @@ import 'daily_limit_screen.dart';
 import 'notification_settings_screen.dart';
 import 'security_settings_screen.dart';
 import 'settings_widgets.dart';
+import '../../services/fliq_api.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,6 +22,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   Uint8List? _avatarBytes;
+  final Future<String> _serverVersion = FliqApi.instance.checkHealth();
 
   void _open(BuildContext context, Widget page) {
     Navigator.of(context)
@@ -137,6 +139,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _showSignOutDialog(context),
               ),
             ],
+          ),
+          const SizedBox(height: 24),
+          FutureBuilder<String>(
+            future: _serverVersion,
+            builder: (context, snapshot) {
+              final String text;
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                text = 'Checking server…';
+              } else if (snapshot.hasError) {
+                text = "Can't reach server";
+              } else {
+                text = 'Server connected · v${snapshot.data}';
+              }
+              return Text(
+                text,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFF777777), fontSize: 13),
+              );
+            },
           ),
         ],
       ),

@@ -16,8 +16,11 @@ import 'package:fliq/screens/settings/daily_limit_screen.dart';
 import 'package:fliq/screens/settings/settings_screen.dart';
 import 'package:fliq/services/biometric_authenticator.dart';
 import 'package:fliq/widgets/fliq_logo.dart';
+import 'package:fliq/services/fliq_api.dart';
 
 void main() {
+  setUp(() => FliqApi.instance = _FakeFliqApi());
+
   testWidgets('welcome screen shows its copy and account actions', (
     WidgetTester tester,
   ) async {
@@ -722,4 +725,9 @@ class _FakeBiometricAuthenticator implements BiometricAuthenticator {
     authenticateCalls++;
     return true;
   }
+}
+
+class _FakeFliqApi extends FliqApi {
+  @override
+  Future<String> checkHealth() async => '0.1.0';
 }

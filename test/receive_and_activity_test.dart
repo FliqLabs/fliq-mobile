@@ -14,8 +14,11 @@ import 'package:fliq/screens/settings/security_settings_screen.dart';
 import 'package:fliq/screens/settings/settings_screen.dart';
 import 'package:fliq/screens/welcome_screen.dart';
 import 'package:fliq/services/biometric_authenticator.dart';
+import 'package:fliq/services/fliq_api.dart';
 
 void main() {
+  setUp(() => FliqApi.instance = _FakeFliqApi());
+
   testWidgets('pay link shows amount, link and closes the request flow', (
     tester,
   ) async {
@@ -409,4 +412,9 @@ void _usePhoneViewport(WidgetTester tester) {
 class _AlwaysAuthenticates implements BiometricAuthenticator {
   @override
   Future<bool> authenticate() async => true;
+}
+
+class _FakeFliqApi extends FliqApi {
+  @override
+  Future<String> checkHealth() async => '0.1.0';
 }
