@@ -133,6 +133,10 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('token-picker')));
     await tester.pumpAndSettle();
+    // The same coins as the iPhone app, in its order.
+    for (final coin in ['BNB', 'ETH', 'SOL', 'USDT']) {
+      expect(find.text(coin), findsOneWidget);
+    }
     await tester.tap(find.text('BTC').last);
     await tester.pumpAndSettle();
 
@@ -292,7 +296,7 @@ void main() {
     expect(find.text('Amount in naira'), findsOneWidget);
   });
 
-  testWidgets('unknown fliq name shows a warning', (tester) async {
+  testWidgets('signed out, a fliq name asks you to sign in', (tester) async {
     _usePhoneViewport(tester);
     await tester.pumpWidget(const MaterialApp(home: FliqRecipientScreen()));
 
@@ -310,7 +314,9 @@ void main() {
     // The name is looked up after a short pause in typing.
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
-    expect(find.text('No one on fliq has that name'), findsOneWidget);
+    // Signed out there is nobody to ask, so it doesn't claim "no one".
+    expect(find.text('No one on fliq has that name'), findsNothing);
+    expect(find.text('Sign in to look up fliq names'), findsOneWidget);
   });
 
   testWidgets('settings opens live rates and money sheets', (tester) async {

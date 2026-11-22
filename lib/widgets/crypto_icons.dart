@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/crypto.dart';
+import 'logos.dart';
 
 /// Round coloured badge for a network (NEAR, Monad, Base, …).
 class NetworkBadge extends StatelessWidget {
@@ -11,6 +12,12 @@ class NetworkBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final logo = Logos.chain(network.name);
+    if (logo != null) {
+      return ClipOval(
+        child: Image.asset(logo, width: size, height: size, fit: BoxFit.cover),
+      );
+    }
     final isNear = network.name == 'NEAR';
     return Container(
       width: size,
@@ -42,6 +49,12 @@ class AssetIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final logo = Logos.token(asset.symbol);
+    if (logo != null) {
+      return ClipOval(
+        child: Image.asset(logo, width: size, height: size, fit: BoxFit.cover),
+      );
+    }
     if (asset.symbol == 'BTC') {
       return Icon(asset.icon, color: asset.color, size: size);
     }

@@ -72,6 +72,10 @@ flutter:
   assets:
     - assets/videos/welcome.mp4
     - assets/images/fliq_logo.png
+    - assets/icon/app_icon.png
+    - assets/logos/banks/
+    - assets/logos/chains/
+    - assets/logos/tokens/
     - assets/images/fliq_symbol_green.png
 
   # To add assets to your application, add an assets section, like this:

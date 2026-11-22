@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -124,18 +125,32 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     const SizedBox(height: 32),
                     welcome.WelcomeButton(
                       label: 'Continue with passkey',
-                      icon: Icons.person_add_alt_1_outlined,
+                      icon: Icons.how_to_reg_outlined,
                       isPrimary: true,
                       onPressed: _start,
                     ),
-                    const SizedBox(height: 12),
-                    welcome.WelcomeButton(
-                      label: 'I already have an account',
-                      icon: Icons.undo_rounded,
-                      isPrimary: false,
-                      onPressed: _start,
-                    ),
-                    const SizedBox(height: 58),
+                    // Debug builds only: look around with sample data while
+                    // sign-in emails aren't working. Never in a release.
+                    if (kDebugMode)
+                      Center(
+                        child: TextButton(
+                          key: const ValueKey('skip-sign-in-demo'),
+                          onPressed: () => Navigator.of(context)
+                              .pushAndRemoveUntil<void>(
+                                MaterialPageRoute(
+                                  builder: (_) => const HomeScreen(),
+                                ),
+                                (_) => false,
+                              ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF8E8E93),
+                          ),
+                          child: const Text('Skip sign-in (demo)'),
+                        ),
+                      )
+                    else
+                      const SizedBox(height: 48),
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),

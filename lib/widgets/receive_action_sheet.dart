@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'fliq_symbol.dart';
+import 'logos.dart';
 import '../services/account_store.dart';
 
 enum ReceiveMethod { bankTransfer, fliqName, externalWallet }
@@ -27,94 +28,115 @@ class ReceiveActionSheet extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
         child: Container(
-          constraints: BoxConstraints(maxHeight: screenHeight * 0.62),
+          constraints: BoxConstraints(maxHeight: screenHeight * 0.8),
           padding: const EdgeInsets.fromLTRB(14, 7, 14, 20),
           decoration: BoxDecoration(
             color: const Color(0xFF19191B),
             borderRadius: BorderRadius.circular(38),
             border: Border.all(color: const Color(0xFF242426)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 52,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF777777),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _ReceiveRoundButton(
-                    key: const ValueKey('receive-back'),
-                    icon: Icons.arrow_back_ios_new_rounded,
-                    tooltip: 'Back',
-                    onPressed: () => Navigator.pop(context),
+          // Scrolls on small screens or with large text.
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 52,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF777777),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  _ReceiveRoundButton(
-                    key: const ValueKey('receive-close'),
-                    icon: Icons.close_rounded,
-                    tooltip: 'Close receive options',
-                    onPressed: () => Navigator.pop(context),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _ReceiveRoundButton(
+                      key: const ValueKey('receive-back'),
+                      icon: Icons.arrow_back_ios_new_rounded,
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    _ReceiveRoundButton(
+                      key: const ValueKey('receive-close'),
+                      icon: Icons.close_rounded,
+                      tooltip: 'Close receive options',
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Icon(
+                  Icons.south_rounded,
+                  color: Color(0xFFC7C7C7),
+                  size: 36,
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'How do you want to get paid?',
+                  key: ValueKey('receive-options-title'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              const Icon(
-                Icons.south_rounded,
-                color: Color(0xFFC7C7C7),
-                size: 36,
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'How do you want to get paid?',
-                key: ValueKey('receive-options-title'),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.3,
                 ),
-              ),
-              const SizedBox(height: 24),
-              _ReceiveOption(
-                key: const ValueKey('receive-bank-transfer'),
-                title: 'Bank transfer',
-                subtitle: 'Pay in naira from any Nigerian bank',
-                icon: Icons.account_balance_outlined,
-                iconColor: Colors.white,
-                leading: const _NigeriaFlag(),
-                onTap: () => Navigator.pop(context, ReceiveMethod.bankTransfer),
-              ),
-              const SizedBox(height: 8),
-              _ReceiveOption(
-                key: const ValueKey('receive-fliq-name'),
-                title: 'Your fliq name',
-                subtitle: 'Share ${AccountStore.instance.nearAccount}',
-                icon: Icons.north_east_rounded,
-                iconColor: const Color(0xFF20D99A),
-                leading: const FliqSymbol(
-                  key: ValueKey('receive-fliq-symbol'),
-                  size: 23,
+                const SizedBox(height: 24),
+                _ReceiveOption(
+                  key: const ValueKey('receive-bank-transfer'),
+                  title: 'Bank transfer',
+                  subtitle: 'Pay in naira from any Nigerian bank',
+                  icon: Icons.account_balance_outlined,
+                  iconColor: Colors.white,
+                  leading: const _NigeriaFlag(),
+                  trailing: LogoStack(
+                    images: [
+                      Logos.bank('gtbank'),
+                      Logos.bank('opay'),
+                      Logos.bank('access-bank'),
+                    ],
+                    whiteBehind: true,
+                  ),
+                  onTap: () =>
+                      Navigator.pop(context, ReceiveMethod.bankTransfer),
                 ),
-                onTap: () => Navigator.pop(context, ReceiveMethod.fliqName),
-              ),
-              const SizedBox(height: 8),
-              _ReceiveOption(
-                key: const ValueKey('receive-external-wallet'),
-                title: 'External wallet',
-                subtitle: 'From any wallet or exchange',
-                icon: Icons.account_balance_wallet_outlined,
-                iconColor: Colors.white,
-                onTap: () =>
-                    Navigator.pop(context, ReceiveMethod.externalWallet),
-              ),
-            ],
+                const SizedBox(height: 8),
+                _ReceiveOption(
+                  key: const ValueKey('receive-fliq-name'),
+                  title: 'Your fliq name',
+                  subtitle: 'Share ${AccountStore.instance.nearAccount}',
+                  icon: Icons.north_east_rounded,
+                  iconColor: const Color(0xFF20D99A),
+                  leading: const FliqSymbol(
+                    key: ValueKey('receive-fliq-symbol'),
+                    size: 23,
+                  ),
+                  onTap: () => Navigator.pop(context, ReceiveMethod.fliqName),
+                ),
+                const SizedBox(height: 8),
+                _ReceiveOption(
+                  key: const ValueKey('receive-external-wallet'),
+                  title: 'External wallet',
+                  subtitle: 'From any wallet or exchange',
+                  icon: Icons.account_balance_wallet_outlined,
+                  iconColor: Colors.white,
+                  // Base, Solana, Arbitrum and six more networks.
+                  trailing: LogoStack(
+                    images: [
+                      Logos.chain('Base')!,
+                      Logos.chain('Solana')!,
+                      Logos.chain('Arbitrum')!,
+                    ],
+                    extra: 6,
+                  ),
+                  onTap: () =>
+                      Navigator.pop(context, ReceiveMethod.externalWallet),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -160,6 +182,7 @@ class _ReceiveOption extends StatelessWidget {
     required this.icon,
     required this.iconColor,
     this.leading,
+    this.trailing,
     required this.onTap,
     super.key,
   });
@@ -169,6 +192,7 @@ class _ReceiveOption extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final Widget? leading;
+  final Widget? trailing;
   final VoidCallback onTap;
 
   @override
@@ -191,7 +215,10 @@ class _ReceiveOption extends StatelessWidget {
           children: [
             SizedBox(
               width: 42,
-              child: leading ?? Icon(icon, size: 23, color: iconColor),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: leading ?? Icon(icon, size: 23, color: iconColor),
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -220,6 +247,7 @@ class _ReceiveOption extends StatelessWidget {
                 ],
               ),
             ),
+            if (trailing != null) ...[const SizedBox(width: 8), trailing!],
             const SizedBox(width: 8),
             const Icon(
               Icons.chevron_right_rounded,
@@ -244,6 +272,8 @@ class _NigeriaFlag extends StatelessWidget {
         width: 32,
         height: 32,
         child: Row(
+          // Stretch so the stripes fill the circle's height.
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(child: ColoredBox(color: Color(0xFF008751))),
             Expanded(child: ColoredBox(color: Colors.white)),

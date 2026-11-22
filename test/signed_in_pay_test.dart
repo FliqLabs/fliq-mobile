@@ -49,6 +49,18 @@ void main() {
     expect(find.text('No one on fliq has that name'), findsNothing);
   });
 
+  testWidgets('signed in, a name nobody has says so', (tester) async {
+    usePhone(tester);
+    await tester.pumpWidget(const MaterialApp(home: FliqRecipientScreen()));
+    await tester.enterText(
+      find.byKey(const ValueKey('fliq-recipient-name')),
+      'seji',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('No one on fliq has that name'), findsOneWidget);
+  });
+
   testWidgets('the quote shows the best route, fees and a held rate', (
     tester,
   ) async {

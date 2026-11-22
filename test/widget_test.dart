@@ -41,7 +41,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Continue with passkey'), findsOneWidget);
-    expect(find.text('I already have an account'), findsOneWidget);
+    // One button, like the iPhone app.
+    expect(find.text('I already have an account'), findsNothing);
     expect(find.byType(FliqLogo), findsOneWidget);
 
     // Passkeys on Android wait on fliq.cash, so sign-up starts with email.
@@ -655,7 +656,8 @@ void main() {
     final initialSwitch = tester.widget<Switch>(
       find.byKey(const ValueKey('cash-out-toggle')),
     );
-    expect(initialSwitch.activeTrackColor, const Color(0xFF737373));
+    // Green when on, like the iPhone app.
+    expect(initialSwitch.activeTrackColor, const Color(0xFF34C759));
     expect(initialSwitch.activeThumbColor, Colors.white);
 
     await tester.tap(find.byKey(const ValueKey('cash-out-toggle')));

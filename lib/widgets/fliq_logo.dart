@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+/// The fliq app icon as the welcome screen shows it: rounded, with a faint
+/// border, like the iPhone app's FliqMark.
 class FliqLogo extends StatelessWidget {
   const FliqLogo({super.key, this.size = 52});
 
@@ -7,19 +9,22 @@ class FliqLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(size / 4);
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        color: const Color(0xD9080911),
-        borderRadius: BorderRadius.circular(size * 0.25),
-        border: Border.all(color: const Color(0xFF303039)),
+      foregroundDecoration: BoxDecoration(
+        borderRadius: radius,
+        border: Border.all(color: const Color(0x24FFFFFF)),
       ),
-      padding: EdgeInsets.all(size * 0.08),
-      child: Image.asset(
-        'assets/images/fliq_logo.png',
-        fit: BoxFit.contain,
-        semanticLabel: 'Fliq logo',
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Image.asset(
+          'assets/icon/app_icon.png',
+          fit: BoxFit.cover,
+          cacheWidth: (size * 4).round(),
+          semanticLabel: 'fliq',
+        ),
       ),
     );
   }

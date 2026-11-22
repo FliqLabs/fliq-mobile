@@ -66,6 +66,19 @@ class ChooseCurrencyPage extends StatelessWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: 22),
+              const _GroupLabel('Coins'),
+              _OptionGroup(
+                children: [
+                  for (final asset in SampleData.coins)
+                    _OptionRow(
+                      key: ValueKey('currency-${asset.symbol}'),
+                      leading: AssetIcon(asset: asset),
+                      title: asset.name,
+                      onTap: () => _choose(context, asset),
+                    ),
+                ],
+              ),
             ],
           ),
         ),

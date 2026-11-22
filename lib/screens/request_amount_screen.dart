@@ -285,11 +285,15 @@ class _CashOutToggle extends StatelessWidget {
             key: const ValueKey('cash-out-toggle'),
             value: value,
             onChanged: onChanged,
-            activeTrackColor: const Color(0xFF737373),
+            activeTrackColor: const Color(0xFF34C759),
             inactiveTrackColor: const Color(0xFF505050),
             inactiveThumbColor: Colors.white,
             activeThumbColor: Colors.white,
-            trackOutlineColor: const WidgetStatePropertyAll(Color(0xFF737373)),
+            trackOutlineColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? const Color(0xFF34C759)
+                  : const Color(0xFF737373),
+            ),
           ),
         ],
       ),

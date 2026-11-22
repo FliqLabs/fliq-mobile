@@ -465,6 +465,15 @@ class _FliqRecipientScreenState extends State<FliqRecipientScreen> {
 
   /// Shown once a name is long enough to look up and nobody has it.
   bool get _nameNotFound =>
+      AccountStore.instance.isSignedIn &&
+      _typedName.length >= 3 &&
+      !_isLooking &&
+      _lookedUp == _typedName &&
+      _person == null;
+
+  /// Signed out there is nobody to ask, so say so instead of "no one".
+  bool get _needsSignIn =>
+      !AccountStore.instance.isSignedIn &&
       _typedName.length >= 3 &&
       !_isLooking &&
       _lookedUp == _typedName &&
@@ -634,6 +643,31 @@ class _FliqRecipientScreenState extends State<FliqRecipientScreen> {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (_needsSignIn)
+                  const Padding(
+                    key: ValueKey('fliq-name-needs-sign-in'),
+                    padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.lock_outline_rounded,
+                          color: Color(0xFFAAAAAA),
+                          size: 18,
+                        ),
+                        SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'Sign in to look up fliq names',
+                            style: TextStyle(
+                              color: Color(0xFFAAAAAA),
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
                             ),

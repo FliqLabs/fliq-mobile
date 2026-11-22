@@ -113,18 +113,33 @@ class SettingsRow extends StatelessWidget {
       iconColor: iconColor,
       trailing: value == null
           ? null
-          : ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 150),
-              child: Text(
-                value!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFFAAAAAA),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 150),
+                  child: Text(
+                    value!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFAAAAAA),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-              ),
+                // Rows that open a screen show the arrow, as on the iPhone.
+                if (onTap != null)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 6),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      color: Color(0xFF777777),
+                      size: 21,
+                    ),
+                  ),
+              ],
             ),
       onTap: onTap,
     );

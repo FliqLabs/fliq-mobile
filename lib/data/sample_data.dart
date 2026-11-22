@@ -142,8 +142,42 @@ abstract final class SampleData {
     arrivesAs: 'USDC in your vault',
   );
 
+  static const bnbCoin = CryptoAsset(
+    symbol: 'BNB',
+    name: 'BNB',
+    color: Color(0xFFF3BA2F),
+    icon: Icons.hexagon_outlined,
+    networks: [bnb],
+    minimum: {'BNB Smart Chain': '0.002 BNB'},
+    arrivesAs: 'USDC in your vault',
+  );
+  static const ether = CryptoAsset(
+    symbol: 'ETH',
+    name: 'Ether',
+    color: Color(0xFF627EEA),
+    icon: Icons.diamond_outlined,
+    networks: [ethereum],
+    minimum: {'Ethereum': '0.0004 ETH'},
+    arrivesAs: 'USDC in your vault',
+  );
+  static const sol = CryptoAsset(
+    symbol: 'SOL',
+    name: 'Solana',
+    color: Color(0xFF14F195),
+    icon: Icons.blur_on_rounded,
+    networks: [solanaFast],
+    minimum: {'Solana': '0.01 SOL'},
+    arrivesAs: 'USDC in your vault',
+  );
+
   static const digitalDollars = [usdc, usdt];
-  static const allAssets = [usdc, usdt, bitcoin];
+
+  /// Other coins, swapped into USDC as they land.
+  static const coins = [bnbCoin, ether, sol];
+
+  /// The token menu on Receive Tokens, in the iPhone app's order.
+  static const tokenMenu = [usdc, bnbCoin, bitcoin, ether, sol, usdt];
+  static const allAssets = [usdc, usdt, bitcoin, bnbCoin, ether, sol];
 
   /// Placeholder deposit address for each network.
   static String depositAddress(CryptoNetwork network) {

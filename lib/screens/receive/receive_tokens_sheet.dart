@@ -26,7 +26,7 @@ class ReceiveTokensSheet extends StatefulWidget {
 
 class _ReceiveTokensSheetState extends State<ReceiveTokensSheet> {
   // Order matches the token menu in the iPhone app.
-  static const _tokens = [SampleData.usdc, SampleData.bitcoin, SampleData.usdt];
+  static const _tokens = SampleData.tokenMenu;
 
   CryptoAsset _token = SampleData.usdc;
   CryptoNetwork _network = SampleData.near;
