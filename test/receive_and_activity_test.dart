@@ -142,6 +142,9 @@ void main() {
       ),
       findsOneWidget,
     );
+    // Signed out, the sheet shows a demo address and says so.
+    expect(find.byKey(const ValueKey('demo-address-warning')), findsOneWidget);
+    await _reveal(tester, find.text('BITCOIN ADDRESS'));
     expect(find.text('BITCOIN ADDRESS'), findsOneWidget);
   });
 
@@ -195,13 +198,11 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('network-Monad')));
     await tester.pumpAndSettle();
     expect(find.text('Monad network'), findsOneWidget);
+    expect(find.byKey(const ValueKey('demo-address-warning')), findsOneWidget);
     expect(find.text('0.10 USDC'), findsOneWidget);
-    expect(find.byKey(const ValueKey('address-open-for')), findsOneWidget);
-    expect(find.text('4,330:00'), findsOneWidget);
-
-    // The countdown ticks every second.
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.text('4,329:59'), findsOneWidget);
+    await _reveal(tester, find.byKey(const ValueKey('address-open-for')));
+    // Counts down to when the address closes, as minutes:seconds.
+    expect(find.textContaining(RegExp(r'^4,3(29|30):\d\d$')), findsOneWidget);
 
     // Back to the network list, then back to currencies, then Bitcoin,
     // which has one network and goes straight to its address.
@@ -306,6 +307,8 @@ void main() {
       find.byKey(const ValueKey('fliq-recipient-name')),
       'seji',
     );
+    // The name is looked up after a short pause in typing.
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
     expect(find.text('No one on fliq has that name'), findsOneWidget);
   });

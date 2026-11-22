@@ -1,4 +1,6 @@
 import 'package:fliq/models/account_models.dart';
+import 'package:fliq/models/deposit.dart';
+import 'package:fliq/models/payment.dart';
 import 'package:fliq/models/rate.dart';
 import 'package:fliq/models/transaction.dart';
 import 'package:fliq/models/user.dart';
@@ -209,4 +211,111 @@ class FakeFliqApi extends FliqApi {
   Future<Map<String, dynamic>> saveNotificationSettings(
     Map<String, dynamic> settings,
   ) async => notifications = Map.of(settings);
+
+  final reserved = <String>[];
+  final createdRequests = <double>[];
+
+  @override
+  Future<List<DepositSource>> depositSources() async => const [
+    DepositSource(
+      token: 'usdc',
+      chain: 'solana',
+      minimum: '1.00',
+      etaSeconds: 35,
+      direct: false,
+      available: true,
+    ),
+    DepositSource(
+      token: 'usdt',
+      chain: 'tron',
+      minimum: '110.00',
+      etaSeconds: 60,
+      direct: false,
+      available: false,
+    ),
+  ];
+
+  @override
+  Future<DepositAddress> reserveDeposit({
+    required String token,
+    required String chain,
+    required String minimum,
+  }) async {
+    reserved.add('$token/$chain');
+    return DepositAddress(
+      depositId: 'dep_01jbd2m5k8w3qf7v9x2c4n6h8t',
+      address: '7xKqWmP3vRt8YhNcJ2uLdE5sBzA9fGkQe4oTiXwMk2r',
+      minimum: minimum,
+      fee: '0.02',
+      reservedUntil: DateTime.now().add(const Duration(minutes: 10)),
+    );
+  }
+
+  @override
+  Future<PaymentRequest> createRequest({
+    required double amountUsd,
+    String note = '',
+    bool cashOutOnArrival = false,
+  }) async {
+    createdRequests.add(amountUsd);
+    return PaymentRequest(
+      id: 'req_01jbdb7f3a2c4e6g8j0k2m4p6r',
+      code: '7f3a',
+      link: 'https://pay.fliq.money/frank/7f3a',
+      amount: amountUsd,
+    );
+  }
+
+  @override
+  Future<Person?> person(String name) async => name == 'tobi'
+      ? const Person(nearAccount: 'tobi.fliq.near', displayName: 'Tobi A.')
+      : null;
+
+  @override
+  Future<VerifiedAccount> verifyAccount({
+    required String bankCode,
+    required String number,
+    required String country,
+  }) async => VerifiedAccount(
+    bankCode: bankCode,
+    number: number,
+    accountName: 'DARA OKONKWO',
+    institution: 'GTBank',
+  );
+
+  @override
+  Future<Quote> quote({
+    required String currency,
+    required double amount,
+    bool receiveLocal = false,
+    bool mobileMoney = false,
+  }) async => Quote.fromJson(const {
+    'quote_id': 'q_31ad77e0',
+    'token': 'usdc',
+    'currency': 'ngn',
+    'amount': '50.00',
+    'rate_before_fees': 1383.2,
+    'fees': {'provider': 25000, 'network': 9400, 'total': 34400},
+    'rate': 1376.32,
+    'receive': 68816,
+    'provider': 'paycrest',
+    'best_of': 4,
+    'routes': [
+      {
+        'provider': 'paycrest',
+        'status': 'live',
+        'rate': 1376.32,
+        'routed': true,
+      },
+      {'provider': 'busha', 'status': 'live', 'rate': 1370.08, 'routed': false},
+      {
+        'provider': 'fonbnk',
+        'status': 'stale',
+        'rate': 1358.4,
+        'routed': false,
+      },
+      {'provider': 'bitnob', 'status': 'paused', 'rate': null, 'routed': false},
+    ],
+    'expires_in': 90,
+  });
 }

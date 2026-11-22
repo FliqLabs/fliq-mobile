@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/sample_data.dart';
+import '../models/deposit.dart';
+import '../services/api_exception.dart';
+import '../services/fliq_api.dart';
 import '../utils/clipboard_share.dart';
 import '../utils/formatters.dart';
 import '../widgets/circle_icon_button.dart';
@@ -18,12 +21,16 @@ class PayLinkScreen extends StatefulWidget {
   const PayLinkScreen({
     required this.amountUsd,
     this.reason,
+    this.cashOutOnArrival = false,
     this.linkId,
     super.key,
   });
 
   final double amountUsd;
   final String? reason;
+
+  /// Pay it on to the user's default bank account when it lands.
+  final bool cashOutOnArrival;
 
   /// Short id at the end of the link. The API will create this; for now a
   /// random one is made. Tests pass a fixed value.
@@ -34,9 +41,52 @@ class PayLinkScreen extends StatefulWidget {
 }
 
 class _PayLinkScreenState extends State<PayLinkScreen> {
-  late final String _link =
-      '${SampleData.payLinkBase}/${AccountStore.instance.handle}/'
-      '${widget.linkId ?? _randomId()}';
+  /// Signed in: the request the server created. Signed out: a demo.
+  PaymentRequest? _request;
+  String? _error;
+
+  /// The link as shown, without `https://`.
+  String get _link =>
+      (_request?.link ?? '').replaceFirst(RegExp('^https?://'), '');
+
+  String get _fullLink => _request?.link ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    _create();
+  }
+
+  Future<void> _create() async {
+    setState(() {
+      _request = null;
+      _error = null;
+    });
+    if (!AccountStore.instance.isSignedIn) {
+      final code = widget.linkId ?? _randomId();
+      setState(
+        () => _request = PaymentRequest(
+          id: 'demo',
+          code: code,
+          link:
+              'https://${SampleData.payLinkBase}/${AccountStore.instance.handle}/$code',
+          amount: widget.amountUsd,
+          isDemo: true,
+        ),
+      );
+      return;
+    }
+    try {
+      final request = await FliqApi.instance.createRequest(
+        amountUsd: widget.amountUsd,
+        note: widget.reason?.trim() ?? '',
+        cashOutOnArrival: widget.cashOutOnArrival,
+      );
+      if (mounted) setState(() => _request = request);
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    }
+  }
 
   static String _randomId() {
     final random = Random();
@@ -47,7 +97,7 @@ class _PayLinkScreenState extends State<PayLinkScreen> {
     final reason = widget.reason?.trim();
     final forWhat = reason == null || reason.isEmpty ? '' : ' for $reason';
     return 'Pay me ${formatUsd(widget.amountUsd)}$forWhat on fliq: '
-        'https://$_link';
+        '$_fullLink';
   }
 
   @override
@@ -165,15 +215,35 @@ class _PayLinkScreenState extends State<PayLinkScreen> {
                         ),
                         child: Column(
                           children: [
-                            FliqQrCode(
-                              data: 'https://$_link',
-                              size: 210,
-                              center: const Icon(
-                                Icons.link_rounded,
-                                color: Colors.white,
-                                size: 24,
+                            if (_error != null) ...[
+                              Text(
+                                _error!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white),
                               ),
-                            ),
+                              TextButton(
+                                onPressed: _create,
+                                child: const Text('Try again'),
+                              ),
+                            ] else if (_request == null)
+                              const SizedBox(
+                                height: 210,
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              )
+                            else
+                              FliqQrCode(
+                                data: _fullLink,
+                                size: 210,
+                                center: const Icon(
+                                  Icons.link_rounded,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
                             const SizedBox(height: 22),
                             Text(
                               _link,
@@ -186,11 +256,14 @@ class _PayLinkScreenState extends State<PayLinkScreen> {
                               ),
                             ),
                             const SizedBox(height: 14),
-                            const Text(
-                              'Anyone can pay it from any chain. It lands in '
-                              'your vault as dollars.',
+                            Text(
+                              _request?.isDemo ?? false
+                                  ? 'Demo link. Sign in to make one people can pay.'
+                                  : 'Anyone can pay it from any chain. It lands '
+                                        'in your vault as dollars.',
+                              key: const ValueKey('pay-link-note'),
                               textAlign: TextAlign.center,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: Color(0xFF8E8E93),
                                 fontSize: 14,
                                 height: 1.35,
@@ -211,11 +284,15 @@ class _PayLinkScreenState extends State<PayLinkScreen> {
                           height: 56,
                           child: FilledButton.icon(
                             key: const ValueKey('copy-pay-link'),
-                            onPressed: () => copyWithFeedback(
-                              context,
-                              'https://$_link',
-                              message: 'Link copied',
-                            ),
+                            onPressed: _request == null
+                                ? null
+                                : () => copyWithFeedback(
+                                    context,
+                                    _fullLink,
+                                    message: _request?.isDemo ?? false
+                                        ? 'Demo link copied. It cannot be paid.'
+                                        : 'Link copied',
+                                  ),
                             icon: const Icon(Icons.copy_rounded, size: 20),
                             label: const Text('Copy link'),
                             style: FilledButton.styleFrom(
@@ -235,8 +312,12 @@ class _PayLinkScreenState extends State<PayLinkScreen> {
                       const SizedBox(width: 14),
                       IconButton(
                         key: const ValueKey('share-pay-link'),
-                        onPressed: () =>
-                            shareText(_shareText, subject: 'fliq pay link'),
+                        onPressed: _request == null || _request!.isDemo
+                            ? null
+                            : () => shareText(
+                                _shareText,
+                                subject: 'fliq pay link',
+                              ),
                         tooltip: 'Share',
                         icon: const Icon(Icons.share_outlined),
                         style: IconButton.styleFrom(

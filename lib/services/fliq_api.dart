@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../models/account_models.dart';
+import '../models/deposit.dart';
+import '../models/payment.dart';
 import '../models/rate.dart';
 import '../models/transaction.dart';
 import '../models/user.dart';
@@ -187,6 +190,132 @@ class FliqApi {
     Map<String, dynamic> settings,
   ) => _send('PUT', '/me/notification-settings', auth: true, body: settings);
 
+  /// Every coin and chain the vault can be topped up from.
+  Future<List<DepositSource>> depositSources() async {
+    final body = await _send('GET', '/deposits/sources', auth: true);
+    return [
+      for (final item in body['sources'] as List<dynamic>? ?? const [])
+        DepositSource.fromJson(item as Map<String, dynamic>),
+    ];
+  }
+
+  /// Reserves an address for one top-up. Moves no money, so it is retried
+  /// after a dropped connection or a server hiccup, with the same key so a
+  /// try that got through unseen hands back the same address.
+  Future<DepositAddress> reserveDeposit({
+    required String token,
+    required String chain,
+    required String minimum,
+  }) async {
+    final key = newIdempotencyKey();
+    for (var attempt = 0; ; attempt++) {
+      try {
+        return DepositAddress.fromJson(
+          await _send(
+            'POST',
+            '/deposits',
+            auth: true,
+            headers: {'Idempotency-Key': key},
+            body: {'token': token, 'chain': chain, 'amount': minimum},
+          ),
+        );
+      } on ApiException catch (error) {
+        final worthRetrying =
+            error.code == 'offline' ||
+            (error.status ?? 0) >= 500 ||
+            error.message.startsWith('NEAR Intents');
+        if (!worthRetrying || attempt >= 2) rethrow;
+        await Future<void>.delayed(Duration(seconds: 1 + attempt * 2));
+      }
+    }
+  }
+
+  /// Creates a payment request and its public pay link.
+  Future<PaymentRequest> createRequest({
+    required double amountUsd,
+    String note = '',
+    bool cashOutOnArrival = false,
+  }) async => PaymentRequest.fromJson(
+    await _send(
+      'POST',
+      '/requests',
+      auth: true,
+      headers: {'Idempotency-Key': newIdempotencyKey()},
+      body: {
+        'amount': amountUsd.toStringAsFixed(2),
+        'note': note.length > 120 ? note.substring(0, 120) : note,
+        'cash_out_on_arrival': cashOutOnArrival,
+      },
+    ),
+  );
+
+  /// A random key so a request sent twice (after a dropped connection) is
+  /// only acted on once.
+  static String newIdempotencyKey() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  /// Asks the bank for the name on an account.
+  Future<VerifiedAccount> verifyAccount({
+    required String bankCode,
+    required String number,
+    required String country,
+  }) async => VerifiedAccount.fromJson(
+    await _send(
+      'POST',
+      '/accounts/verify',
+      auth: true,
+      body: {'bank': bankCode, 'number': number, 'country': country},
+    ),
+  );
+
+  /// The best after-fee price across providers.
+  ///
+  /// With [receiveLocal] the [amount] is what the recipient gets in local
+  /// money; otherwise it is the dollars that leave the vault.
+  Future<Quote> quote({
+    required String currency,
+    required double amount,
+    bool receiveLocal = false,
+    bool mobileMoney = false,
+  }) async => Quote.fromJson(
+    await _send(
+      'POST',
+      '/quotes',
+      auth: true,
+      body: {
+        'token': 'usdc',
+        'currency': currency.toLowerCase(),
+        'amount': amount.toStringAsFixed(receiveLocal ? 0 : 2),
+        'mode': receiveLocal ? 'receive' : 'send',
+        'payout_type': mobileMoney ? 'mobile_money' : 'bank',
+      },
+    ),
+  );
+
+  /// Looks up another fliq user by name. Null when nobody has it.
+  Future<Person?> person(String name) async {
+    try {
+      return Person.fromJson(
+        await _send('GET', '/people/${Uri.encodeComponent(name)}', auth: true),
+      );
+    } on ApiException catch (error) {
+      if (error.status == 404) return null;
+      rethrow;
+    }
+  }
+
+  /// People this user paid lately, newest first.
+  Future<List<Person>> recentPeople() async {
+    final body = await _send('GET', '/people/recent', auth: true);
+    return [
+      for (final item in body['items'] as List<dynamic>? ?? const [])
+        Person.fromJson(item as Map<String, dynamic>),
+    ];
+  }
+
   // ── Plumbing ──────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> _send(
@@ -195,6 +324,7 @@ class FliqApi {
     Object? body,
     bool auth = false,
     Map<String, String>? query,
+    Map<String, String>? headers,
     bool isRetry = false,
   }) async {
     SessionTokens? tokens;
@@ -209,6 +339,7 @@ class FliqApi {
     );
     request.headers['Accept'] = 'application/json';
     request.headers['X-Device-Name'] = 'Android';
+    if (headers != null) request.headers.addAll(headers);
     if (tokens != null) {
       request.headers['Authorization'] = 'Bearer ${tokens.accessToken}';
     }
@@ -234,6 +365,7 @@ class FliqApi {
           body: body,
           auth: auth,
           query: query,
+          headers: headers,
           isRetry: true,
         );
       }

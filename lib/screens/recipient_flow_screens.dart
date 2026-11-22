@@ -1,8 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../widgets/fliq_symbol.dart';
+import 'pay/payout_amount_screen.dart';
 import 'send_amount_screen.dart';
+import '../models/payment.dart';
+import '../services/account_store.dart';
+import '../services/api_exception.dart';
+import '../services/biometric_authenticator.dart';
+import '../services/fliq_api.dart';
+import '../services/payouts.dart';
 import '../utils/amount_input.dart';
 import '../widgets/amount_keypad.dart';
 import '../data/sample_data.dart';
@@ -109,6 +118,31 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
   String? _selectedBank;
   bool _saveRecipient = true;
 
+  /// Banks from the server once signed in: name → code.
+  Map<String, String>? _serverBanks;
+  bool _isChecking = false;
+  String? _checkError;
+
+  String get _countryCode => widget.currencyCode == 'KES' ? 'ke' : 'ng';
+
+  @override
+  void initState() {
+    super.initState();
+    if (AccountStore.instance.isSignedIn && _isBankTransfer) _loadBanks();
+  }
+
+  Future<void> _loadBanks() async {
+    try {
+      final banks = await FliqApi.instance.institutions(_countryCode);
+      if (!mounted || banks.isEmpty) return;
+      setState(
+        () => _serverBanks = {for (final bank in banks) bank.name: bank.code},
+      );
+    } on ApiException {
+      // Keep the short built-in list.
+    }
+  }
+
   bool get _isBankTransfer =>
       widget.deliveryType == RecipientDeliveryType.bankTransfer;
   bool get _isMobileMoney =>
@@ -136,16 +170,101 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
     super.dispose();
   }
 
-  void _continue() {
-    if (!_canContinue) return;
+  Future<void> _continue() async {
+    if (!_canContinue || _isChecking) return;
+    FocusScope.of(context).unfocus();
+    if (_isMobileMoney) {
+      final provider = _selectedProvider!;
+      _openAmount(
+        VerifiedAccount(
+          bankCode: provider,
+          number: _phoneController.text,
+          accountName: _phoneController.text,
+          institution: provider,
+          nameVerified: false,
+        ),
+        mobileMoney: true,
+      );
+      return;
+    }
+    if (!_isBankTransfer) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const SendAmountScreen()),
+      );
+      return;
+    }
+    if (!AccountStore.instance.isSignedIn) {
+      // Signed out: the canonical example account, so the flow can be seen.
+      _openAmount(
+        VerifiedAccount(
+          bankCode: '058',
+          number: _accountController.text,
+          accountName: 'DARA OKONKWO',
+          institution: _bankName,
+        ),
+      );
+      return;
+    }
+    final code = _serverBanks?[_bankName];
+    if (code == null) {
+      setState(
+        () =>
+            _checkError = "Couldn't load the bank list. Check your connection.",
+      );
+      return;
+    }
+    setState(() {
+      _isChecking = true;
+      _checkError = null;
+    });
+    try {
+      final account = await FliqApi.instance.verifyAccount(
+        bankCode: code,
+        number: _accountController.text,
+        country: _countryCode,
+      );
+      if (_saveRecipient) {
+        unawaited(
+          FliqApi.instance
+              .saveRecipient(
+                bankCode: code,
+                number: _accountController.text,
+                country: _countryCode,
+              )
+              .then((_) {}, onError: (_) {}),
+        );
+      }
+      if (mounted) _openAmount(account);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(
+        () => _checkError = error.status == 404
+            ? "The bank couldn't find that account. Check the number."
+            : error.message,
+      );
+    } finally {
+      if (mounted) setState(() => _isChecking = false);
+    }
+  }
+
+  void _openAmount(VerifiedAccount account, {bool mobileMoney = false}) {
     Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const SendAmountScreen()),
+      MaterialPageRoute<void>(
+        builder: (_) => PayoutAmountScreen(
+          account: account,
+          currency: widget.currencyCode,
+          mobileMoney: mobileMoney,
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final bankOptions = _bankOptions[widget.currencyCode] ?? const ['Bank'];
+    final bankOptions =
+        _serverBanks?.keys.toList() ??
+        _bankOptions[widget.currencyCode] ??
+        const ['Bank'];
 
     return _RecipientFlowShell(
       onBack: () => Navigator.of(context).pop(),
@@ -255,6 +374,15 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
               ],
             ),
           ),
+          if (_checkError != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+              child: Text(
+                _checkError!,
+                key: const ValueKey('recipient-error'),
+                style: const TextStyle(color: Color(0xFFE65D66), fontSize: 14),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             child: Column(
@@ -286,7 +414,7 @@ class _RecipientDetailsScreenState extends State<RecipientDetailsScreen> {
                   height: 52,
                   child: OutlinedButton(
                     key: const ValueKey('recipient-continue'),
-                    onPressed: _canContinue ? _continue : null,
+                    onPressed: _canContinue && !_isChecking ? _continue : null,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white,
                       disabledForegroundColor: const Color(0xFF666666),
@@ -327,10 +455,83 @@ class _FliqRecipientScreenState extends State<FliqRecipientScreen> {
   String get _typedName =>
       _nameController.text.trim().replaceFirst('@', '').toLowerCase();
 
+  Timer? _lookupDelay;
+  String? _lookedUp;
+  Person? _person;
+  bool _isLooking = false;
+  bool _isPaying = false;
+
   /// Shown once a name is long enough to look up and nobody has it.
-  /// The API will do this lookup later; for now it checks [SampleData].
   bool get _nameNotFound =>
-      _typedName.length >= 3 && !SampleData.knownFliqUsers.contains(_typedName);
+      _typedName.length >= 3 &&
+      !_isLooking &&
+      _lookedUp == _typedName &&
+      _person == null;
+
+  bool get _canPay =>
+      _person != null &&
+      _parsedAmount > 0 &&
+      _parsedAmount <= AccountStore.instance.balanceUsd &&
+      !_isPaying;
+
+  void _onNameChanged(String _) {
+    _lookupDelay?.cancel();
+    setState(() => _person = null);
+    final name = _typedName;
+    if (name.length < 3) return;
+    // Wait for a short pause in typing before asking the server.
+    _lookupDelay = Timer(
+      const Duration(milliseconds: 350),
+      () => _lookup(name),
+    );
+  }
+
+  Future<void> _lookup(String name) async {
+    setState(() => _isLooking = true);
+    Person? person;
+    if (AccountStore.instance.isSignedIn) {
+      try {
+        person = await FliqApi.instance.person(name);
+      } on ApiException {
+        person = null;
+      }
+    } else if (SampleData.knownFliqUsers.contains(name)) {
+      person = Person(nearAccount: '$name.fliq.near', displayName: name);
+    }
+    if (!mounted || name != _typedName) return;
+    setState(() {
+      _isLooking = false;
+      _lookedUp = name;
+      _person = person;
+    });
+  }
+
+  Future<void> _pay() async {
+    final person = _person;
+    if (person == null || !_canPay) return;
+    setState(() => _isPaying = true);
+    try {
+      final authenticated = await const LocalBiometricAuthenticator()
+          .authenticate();
+      if (!mounted || !authenticated) return;
+      await Transfers.instance.sendToPerson(person, _parsedAmount);
+    } on PayoutNotReady catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(error.message),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      }
+    } catch (_) {
+      // Biometrics unavailable or cancelled: nothing happened.
+    } finally {
+      if (mounted) setState(() => _isPaying = false);
+    }
+  }
 
   void _onAmountKeyTap(String key) {
     setState(() => _amount = applyAmountKey(_amount, key));
@@ -338,6 +539,7 @@ class _FliqRecipientScreenState extends State<FliqRecipientScreen> {
 
   @override
   void dispose() {
+    _lookupDelay?.cancel();
     _nameController.dispose();
     super.dispose();
   }
@@ -383,7 +585,7 @@ class _FliqRecipientScreenState extends State<FliqRecipientScreen> {
                 TextField(
                   key: const ValueKey('fliq-recipient-name'),
                   controller: _nameController,
-                  onChanged: (_) => setState(() {}),
+                  onChanged: _onNameChanged,
                   textInputAction: TextInputAction.done,
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                   decoration: InputDecoration(
@@ -401,6 +603,32 @@ class _FliqRecipientScreenState extends State<FliqRecipientScreen> {
                     ),
                   ),
                 ),
+                if (_person case final person?)
+                  Padding(
+                    key: const ValueKey('fliq-person-found'),
+                    padding: const EdgeInsets.fromLTRB(4, 12, 4, 0),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          color: Color(0xFF2EB467),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            '${person.displayName ?? person.handle} · ${person.nearAccount}',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (_nameNotFound)
                   const Padding(
                     key: ValueKey('fliq-name-not-found'),
@@ -508,14 +736,19 @@ class _FliqRecipientScreenState extends State<FliqRecipientScreen> {
                   height: 54,
                   child: OutlinedButton.icon(
                     key: const ValueKey('fliq-recipient-pay'),
-                    onPressed: null,
+                    onPressed: _canPay ? _pay : null,
                     icon: const Icon(Icons.fingerprint_rounded, size: 18),
                     label: Text(
                       'Pay \$${_parsedAmount.toStringAsFixed(0)} with biometrics',
                     ),
                     style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
                       disabledForegroundColor: const Color(0xFF666666),
-                      side: const BorderSide(color: Color(0xFF393939)),
+                      side: BorderSide(
+                        color: _canPay
+                            ? const Color(0xFF777777)
+                            : const Color(0xFF393939),
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),

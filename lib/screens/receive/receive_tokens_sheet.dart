@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../data/sample_data.dart';
 import '../../models/crypto.dart';
+import '../../models/deposit.dart';
+import '../../services/api_exception.dart';
+import '../../services/deposit_addresses.dart';
 import '../../utils/clipboard_share.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/crypto_icons.dart';
@@ -28,6 +31,37 @@ class _ReceiveTokensSheetState extends State<ReceiveTokensSheet> {
   CryptoAsset _token = SampleData.usdc;
   CryptoNetwork _network = SampleData.near;
 
+  DepositAddress? _deposit;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  /// Fetches the address for the current token and network. A slow answer
+  /// for an old choice is dropped.
+  Future<void> _load() async {
+    final token = _token;
+    final network = _network;
+    setState(() {
+      _deposit = null;
+      _error = null;
+    });
+    try {
+      final deposit = await DepositAddresses.instance.addressFor(
+        token,
+        network,
+      );
+      if (!mounted || token != _token || network != _network) return;
+      setState(() => _deposit = deposit);
+    } on ApiException catch (error) {
+      if (!mounted || token != _token || network != _network) return;
+      setState(() => _error = error.message);
+    }
+  }
+
   void _selectToken(CryptoAsset token) {
     setState(() {
       _token = token;
@@ -37,11 +71,18 @@ class _ReceiveTokensSheetState extends State<ReceiveTokensSheet> {
         orElse: () => token.networks.first,
       );
     });
+    _load();
+  }
+
+  void _selectNetwork(CryptoNetwork network) {
+    setState(() => _network = network);
+    _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    final address = SampleData.depositAddress(_network);
+    final deposit = _deposit;
+    final address = deposit?.address ?? '';
     final isNear = _network.name == 'NEAR';
 
     return Column(
@@ -106,7 +147,7 @@ class _ReceiveTokensSheetState extends State<ReceiveTokensSheet> {
                 label: _network.name,
                 options: _token.networks,
                 optionLabel: (network) => network.name,
-                onSelected: (network) => setState(() => _network = network),
+                onSelected: _selectNetwork,
               ),
               const SizedBox(height: 18),
               Container(
@@ -139,18 +180,57 @@ class _ReceiveTokensSheetState extends State<ReceiveTokensSheet> {
                 ),
               ),
               const SizedBox(height: 24),
+              if (deposit?.isDemo ?? false)
+                Container(
+                  key: const ValueKey('demo-address-warning'),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2E2414),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Text(
+                    "Demo address. Don't send real money to it. Sign in to get "
+                    'your own.',
+                    style: TextStyle(
+                      color: Color(0xFFF5A623),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               Center(
                 child: Container(
+                  width: 278,
+                  height: 278,
+                  alignment: Alignment.center,
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
                     color: const Color(0xFF161618),
                     borderRadius: BorderRadius.circular(28),
                   ),
-                  child: FliqQrCode(
-                    data: address,
-                    size: 230,
-                    center: NetworkBadge(network: _network, size: 34),
-                  ),
+                  child: _error != null
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _error!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            TextButton(
+                              onPressed: _load,
+                              child: const Text('Try again'),
+                            ),
+                          ],
+                        )
+                      : deposit == null
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : FliqQrCode(
+                          data: address,
+                          size: 230,
+                          center: NetworkBadge(network: _network, size: 34),
+                        ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -186,7 +266,9 @@ class _ReceiveTokensSheetState extends State<ReceiveTokensSheet> {
                               ),
                             ),
                           Text(
-                            shortenAddress(address, head: 8, tail: 9),
+                            deposit == null
+                                ? '…'
+                                : shortenAddress(address, head: 8, tail: 9),
                             style: const TextStyle(
                               color: FliqSheetColors.muted,
                               fontSize: 14,
@@ -200,20 +282,26 @@ class _ReceiveTokensSheetState extends State<ReceiveTokensSheet> {
                       key: const ValueKey('receive-tokens-copy'),
                       icon: Icons.copy_rounded,
                       tooltip: 'Copy address',
-                      onPressed: () => copyWithFeedback(
-                        context,
-                        address,
-                        message: 'Address copied',
-                      ),
+                      onPressed: deposit == null
+                          ? null
+                          : () => copyWithFeedback(
+                              context,
+                              address,
+                              message: deposit.isDemo
+                                  ? 'Demo address copied. Do not send money to it.'
+                                  : 'Address copied',
+                            ),
                     ),
                     const SizedBox(width: 10),
                     _SquareIconButton(
                       icon: Icons.share_outlined,
                       tooltip: 'Share address',
-                      onPressed: () => shareText(
-                        'Send ${_token.symbol} on ${_network.name} to: '
-                        '$address',
-                      ),
+                      onPressed: deposit == null || deposit.isDemo
+                          ? null
+                          : () => shareText(
+                              'Send ${_token.symbol} on ${_network.name} to: '
+                              '$address',
+                            ),
                     ),
                   ],
                 ),
@@ -320,7 +408,7 @@ class _SquareIconButton extends StatelessWidget {
 
   final IconData icon;
   final String tooltip;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {

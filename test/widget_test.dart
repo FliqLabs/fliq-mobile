@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fliq/app.dart';
 import 'package:fliq/screens/home_screen.dart';
 import 'package:fliq/screens/new_recipient_screen.dart';
+import 'package:fliq/screens/pay/payout_amount_screen.dart';
 import 'package:fliq/screens/pay_to_screen.dart';
 import 'package:fliq/screens/qr_scanner_screen.dart';
 import 'package:fliq/screens/recipient_flow_screens.dart';
@@ -536,7 +537,9 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('recipient-continue')));
     await tester.pumpAndSettle();
-    expect(find.byType(SendAmountScreen), findsOneWidget);
+    // The bank account goes on to "They receive ₦…".
+    expect(find.byType(PayoutAmountScreen), findsOneWidget);
+    expect(find.text('They receive'), findsOneWidget);
   });
 
   testWidgets('Kenyan shilling offers mobile money provider form', (

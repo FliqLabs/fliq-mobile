@@ -38,6 +38,7 @@ class _RequestAmountScreenState extends State<RequestAmountScreen> {
         builder: (_) => PayLinkScreen(
           amountUsd: double.parse(_amount),
           reason: _reasonController.text,
+          cashOutOnArrival: _cashOutToBank,
         ),
       ),
     );

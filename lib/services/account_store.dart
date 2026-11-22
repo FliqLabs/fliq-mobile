@@ -6,6 +6,7 @@ import '../data/sample_data.dart';
 import '../models/transaction.dart';
 import '../models/user.dart';
 import 'api_exception.dart';
+import 'deposit_addresses.dart';
 import 'fliq_api.dart';
 
 /// The signed-in user's profile, balance and activity, shared by every screen.
@@ -96,6 +97,7 @@ class AccountStore extends ChangeNotifier {
   }
 
   void _forget() {
+    DepositAddresses.instance.clear();
     _isSignedIn = false;
     _user = null;
     _balance = null;
