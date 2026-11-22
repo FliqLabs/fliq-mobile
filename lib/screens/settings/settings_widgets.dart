@@ -113,12 +113,17 @@ class SettingsRow extends StatelessWidget {
       iconColor: iconColor,
       trailing: value == null
           ? null
-          : Text(
-              value!,
-              style: const TextStyle(
-                color: Color(0xFFAAAAAA),
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+          : ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 150),
+              child: Text(
+                value!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFFAAAAAA),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
       onTap: onTap,

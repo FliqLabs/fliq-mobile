@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../services/account_store.dart';
+import '../../services/api_exception.dart';
+import '../../services/fliq_api.dart';
 import 'settings_widgets.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
@@ -22,6 +25,68 @@ class _NotificationSettingsScreenState
     'Rate alert': false,
     'Weekly summary': false,
   };
+
+  /// Switch titles and the API's names for them.
+  static const _keys = {
+    'Received in your vault': 'received',
+    'Payout paid': 'payout_paid',
+    'Payout refunded': 'payout_refunded',
+    'An agent paid': 'agent_paid',
+    'An agent was refused': 'agent_refused',
+    'Daily cap almost reached': 'cap_almost_reached',
+    'Weekly summary': 'weekly_summary',
+  };
+
+  Map<String, dynamic>? _server;
+
+  @override
+  void initState() {
+    super.initState();
+    if (AccountStore.instance.isSignedIn) _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final settings = await FliqApi.instance.notificationSettings();
+      if (!mounted) return;
+      setState(() {
+        _server = settings;
+        for (final entry in _keys.entries) {
+          _values[entry.key] = settings[entry.value] as bool? ?? true;
+        }
+        final rate = settings['rate_alert'] as Map<String, dynamic>?;
+        _values['Rate alert'] = rate?['enabled'] as bool? ?? false;
+      });
+    } on ApiException {
+      // Keep the defaults on screen.
+    }
+  }
+
+  Future<void> _save() async {
+    final server = _server;
+    if (server == null) return;
+    final next = Map<String, dynamic>.of(server);
+    for (final entry in _keys.entries) {
+      next[entry.value] = _values[entry.key];
+    }
+    final rate = Map<String, dynamic>.of(
+      server['rate_alert'] as Map<String, dynamic>? ??
+          const {'currency': 'NGN', 'above': 1400},
+    );
+    rate['enabled'] = _values['Rate alert'];
+    next['rate_alert'] = rate;
+    try {
+      _server = await FliqApi.instance.saveNotificationSettings(next);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,5 +139,6 @@ class _NotificationSettingsScreenState
 
   void _setValue(String title, bool value) {
     setState(() => _values[title] = value);
+    _save();
   }
 }

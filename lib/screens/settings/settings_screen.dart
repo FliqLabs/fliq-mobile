@@ -11,7 +11,9 @@ import 'daily_limit_screen.dart';
 import 'notification_settings_screen.dart';
 import 'security_settings_screen.dart';
 import 'settings_widgets.dart';
+import '../../services/api_exception.dart';
 import '../../services/fliq_api.dart';
+import '../../utils/formatters.dart';
 import '../../services/account_store.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -24,6 +26,49 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   Uint8List? _avatarBytes;
   final Future<String> _serverVersion = FliqApi.instance.checkHealth();
+
+  String _bankValue = 'Not added';
+  String _limitValue = 'Not set';
+  String _devicesValue = '1 signed in';
+
+  @override
+  void initState() {
+    super.initState();
+    if (AccountStore.instance.isSignedIn) _loadSummary();
+  }
+
+  /// Fills the row values from the server. Each part fails on its own.
+  Future<void> _loadSummary() async {
+    final api = FliqApi.instance;
+    try {
+      final own = (await api.recipients()).where((r) => r.own).toList();
+      if (mounted && own.isNotEmpty) {
+        setState(
+          () => _bankValue = '${own.first.bankName} •••• ${own.first.last4}',
+        );
+      }
+    } on ApiException {
+      // Leave the default.
+    }
+    try {
+      final limits = await api.limits();
+      if (mounted && limits.dailyLimit != null) {
+        setState(
+          () => _limitValue = '\$${groupDigits(limits.dailyLimit!)} a day',
+        );
+      }
+    } on ApiException {
+      // Leave the default.
+    }
+    try {
+      final sessions = await api.deviceSessions();
+      if (mounted) {
+        setState(() => _devicesValue = '${sessions.length} signed in');
+      }
+    } on ApiException {
+      // Leave the default.
+    }
+  }
 
   void _open(BuildContext context, Widget page) {
     Navigator.of(context)
@@ -67,7 +112,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               SettingsRow(
                 icon: Icons.account_balance_outlined,
                 title: 'Your bank account',
-                value: 'Not added',
+                value: _bankValue,
                 onTap: () => _open(context, const AccountsSettingsScreen()),
               ),
               SettingsRow(
@@ -97,7 +142,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               SettingsRow(
                 icon: Icons.pie_chart_outline_rounded,
                 title: 'Your daily limit',
-                value: 'Not set',
+                value: _limitValue,
                 onTap: () => _open(context, const DailyLimitScreen()),
               ),
             ],
@@ -115,7 +160,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               SettingsRow(
                 icon: Icons.phone_iphone_rounded,
                 title: 'Devices and sessions',
-                value: '1 signed in',
+                value: _devicesValue,
                 onTap: () => _open(context, const DevicesSettingsScreen()),
               ),
               SettingsRow(

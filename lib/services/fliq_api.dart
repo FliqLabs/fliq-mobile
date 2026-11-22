@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import '../models/account_models.dart';
 import '../models/rate.dart';
 import '../models/transaction.dart';
 import '../models/user.dart';
@@ -102,6 +103,89 @@ class FliqApi {
         Transaction.fromActivity(item as Map<String, dynamic>),
     ];
   }
+
+  /// Banks and mobile-money providers in a country, e.g. `ng` or `ke`.
+  Future<List<Institution>> institutions(String country) async {
+    final body = await _send(
+      'GET',
+      '/institutions',
+      auth: true,
+      query: {'country': country},
+    );
+    return [
+      for (final item in body['items'] as List<dynamic>? ?? const [])
+        Institution.fromJson(item as Map<String, dynamic>),
+    ];
+  }
+
+  /// Saved accounts, newest first.
+  Future<List<Recipient>> recipients() async {
+    final body = await _send('GET', '/recipients', auth: true);
+    return [
+      for (final item in body['items'] as List<dynamic>? ?? const [])
+        Recipient.fromJson(item as Map<String, dynamic>),
+    ];
+  }
+
+  /// Checks the account with its bank and saves it. Saving one that is
+  /// already saved returns the existing one.
+  Future<Recipient> saveRecipient({
+    required String bankCode,
+    required String number,
+    required String country,
+    bool own = false,
+  }) async {
+    final saved = Recipient.fromJson(
+      await _send(
+        'POST',
+        '/recipients',
+        auth: true,
+        body: {'bank': bankCode, 'number': number, 'country': country},
+      ),
+    );
+    if (!own) return saved;
+    return Recipient.fromJson(
+      await _send(
+        'PATCH',
+        '/recipients/${saved.id}',
+        auth: true,
+        body: {'own': true},
+      ),
+    );
+  }
+
+  Future<Limits> limits() async =>
+      Limits.fromJson(await _send('GET', '/me/limits', auth: true));
+
+  /// Dollars, or null to remove the limit. A raise or removal waits 24 hours.
+  Future<Limits> setDailyLimit(double? dollars) async => Limits.fromJson(
+    await _send(
+      'PUT',
+      '/me/limits',
+      auth: true,
+      body: {'daily_limit': dollars?.toStringAsFixed(2)},
+    ),
+  );
+
+  Future<List<DeviceSession>> deviceSessions() async {
+    final body = await _send('GET', '/sessions', auth: true);
+    return [
+      for (final item in body['items'] as List<dynamic>? ?? const [])
+        DeviceSession.fromJson(item as Map<String, dynamic>),
+    ];
+  }
+
+  Future<void> revokeSession(String id) async {
+    await _send('DELETE', '/sessions/$id', auth: true);
+  }
+
+  /// The notification switches, keyed as the API names them.
+  Future<Map<String, dynamic>> notificationSettings() =>
+      _send('GET', '/me/notification-settings', auth: true);
+
+  Future<Map<String, dynamic>> saveNotificationSettings(
+    Map<String, dynamic> settings,
+  ) => _send('PUT', '/me/notification-settings', auth: true, body: settings);
 
   // ── Plumbing ──────────────────────────────────────────────────────────
 

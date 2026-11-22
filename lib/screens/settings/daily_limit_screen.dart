@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../../services/account_store.dart';
+import '../../services/api_exception.dart';
 import '../../services/biometric_authenticator.dart';
+import '../../services/fliq_api.dart';
 import '../../utils/amount_input.dart';
 import 'settings_widgets.dart';
 
@@ -20,6 +23,38 @@ class DailyLimitScreen extends StatefulWidget {
 
 class _DailyLimitScreenState extends State<DailyLimitScreen> {
   String? _savedLimit;
+  String? _pendingNote;
+
+  @override
+  void initState() {
+    super.initState();
+    if (AccountStore.instance.isSignedIn) _loadLimits();
+  }
+
+  Future<void> _loadLimits() async {
+    try {
+      final limits = await FliqApi.instance.limits();
+      if (!mounted) return;
+      setState(() {
+        _savedLimit = limits.dailyLimit == null
+            ? null
+            : '\$${_formatLimit(limits.dailyLimit!)} per day';
+        _pendingNote = !limits.hasPendingRaise
+            ? null
+            : limits.pendingLimit == null
+            ? 'Removing your limit takes effect ${_when(limits.pendingAt!)}.'
+            : 'Rising to \$${_formatLimit(limits.pendingLimit!)} '
+                  '${_when(limits.pendingAt!)}.';
+      });
+    } on ApiException {
+      // Keep showing what we have; the screen still works.
+    }
+  }
+
+  String _when(DateTime at) {
+    final hours = at.difference(DateTime.now()).inHours;
+    return hours <= 0 ? 'any minute now' : 'in about $hours hours';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +81,19 @@ class _DailyLimitScreenState extends State<DailyLimitScreen> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+                if (_pendingNote != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _pendingNote!,
+                    key: const ValueKey('daily-limit-pending'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFFF5A623),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
                 SizedBox(height: 14),
                 Text(
                   'Set the most that can leave your account in a day. If your phone is ever stolen, that is the most anyone could take.',
@@ -110,7 +158,11 @@ class _DailyLimitScreenState extends State<DailyLimitScreen> {
         )
         .then((limit) {
           if (limit == null || !mounted) return;
-          setState(() => _savedLimit = '\$${_formatLimit(limit)} per day');
+          if (AccountStore.instance.isSignedIn) {
+            _loadLimits();
+          } else {
+            setState(() => _savedLimit = '\$${_formatLimit(limit)} per day');
+          }
         });
   }
 
@@ -352,8 +404,20 @@ class _DailyLimitEntryScreenState extends State<_DailyLimitEntryScreen> {
         _showMessage('Authentication was not completed.');
         return;
       }
-      _showMessage('Daily limit saved.');
-      Navigator.of(context).pop(double.parse(_amount));
+      final amount = double.parse(_amount);
+      var message = 'Daily limit saved.';
+      if (AccountStore.instance.isSignedIn) {
+        final limits = await FliqApi.instance.setDailyLimit(amount);
+        if (!mounted) return;
+        if (limits.hasPendingRaise) {
+          message = 'Raising your limit takes 24 hours. We will tell you.';
+        }
+      }
+      _showMessage(message);
+      Navigator.of(context).pop(amount);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      _showMessage(error.message);
     } on LocalAuthException catch (error) {
       if (!mounted) return;
       debugPrint('Daily limit biometric authentication failed: $error');

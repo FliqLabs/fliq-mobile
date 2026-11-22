@@ -205,7 +205,8 @@ class _SignInScreenState extends State<SignInScreen> {
     const SizedBox(height: 8),
     Text(
       'We sent a sign-in link to ${_emailController.text.trim()}. '
-      'Copy the link from the email and paste it here.',
+      'Copy the link from the email and paste it here. '
+      "Not there after a minute? Check your spam folder.",
       style: const TextStyle(
         color: Color(0xFF9A9A9E),
         fontSize: 16,

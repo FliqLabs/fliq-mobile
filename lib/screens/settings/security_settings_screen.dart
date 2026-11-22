@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../models/account_models.dart';
+import '../../services/account_store.dart';
+import '../../services/api_exception.dart';
+import '../../services/fliq_api.dart';
 import 'settings_widgets.dart';
 
 enum AppLockDelay { immediately, oneMinute, fiveMinutes }
@@ -148,7 +152,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
           const SizedBox(height: 24),
           const SectionLabel('DEVICES AND SESSIONS'),
           const SizedBox(height: 12),
-          const _ThisDeviceTile(),
+          const DeviceSessionsList(),
         ],
       ),
     );
@@ -268,7 +272,7 @@ class DevicesSettingsScreen extends StatelessWidget {
       title: 'Devices and sessions',
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-        children: const [_ThisDeviceTile()],
+        children: const [DeviceSessionsList()],
       ),
     );
   }
@@ -335,6 +339,106 @@ class MoneyHeldSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// This phone, plus every other device signed in to the account once signed
+/// in, each with a way to sign it out.
+class DeviceSessionsList extends StatefulWidget {
+  const DeviceSessionsList({super.key});
+
+  @override
+  State<DeviceSessionsList> createState() => _DeviceSessionsListState();
+}
+
+class _DeviceSessionsListState extends State<DeviceSessionsList> {
+  List<DeviceSession>? _sessions;
+
+  @override
+  void initState() {
+    super.initState();
+    if (AccountStore.instance.isSignedIn) _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final sessions = await FliqApi.instance.deviceSessions();
+      if (mounted) setState(() => _sessions = sessions);
+    } on ApiException {
+      // Show just this phone.
+    }
+  }
+
+  Future<void> _signOut(DeviceSession session) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF202020),
+        title: Text('Sign out ${session.device}?'),
+        content: const Text('It will need to sign in again to use fliq.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Sign out',
+              style: TextStyle(color: Color(0xFFE65D66)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await FliqApi.instance.revokeSession(session.id);
+      await _load();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  String _ago(DateTime time) {
+    final gap = DateTime.now().difference(time);
+    if (gap.inMinutes < 2) return 'active now';
+    if (gap.inHours < 1) return 'active ${gap.inMinutes} min ago';
+    if (gap.inDays < 1) return 'active ${gap.inHours} h ago';
+    return 'active ${gap.inDays} days ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sessions = _sessions;
+    if (sessions == null || sessions.isEmpty) return const _ThisDeviceTile();
+    return Column(
+      children: [
+        for (final (index, session) in sessions.indexed)
+          SettingsTile(
+            key: ValueKey('session-${session.id}'),
+            title: session.current
+                ? '${session.device}\nThis device · active now'
+                : '${session.device}\n${_ago(session.lastActiveAt)}',
+            showDivider: index < sessions.length - 1,
+            trailing: session.current
+                ? const Icon(Icons.circle, color: Color(0xFF2EB467), size: 10)
+                : TextButton(
+                    onPressed: () => _signOut(session),
+                    child: const Text(
+                      'Sign out',
+                      style: TextStyle(color: Color(0xFFE65D66)),
+                    ),
+                  ),
+          ),
+      ],
     );
   }
 }

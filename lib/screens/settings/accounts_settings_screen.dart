@@ -3,6 +3,10 @@ import 'package:flutter/services.dart';
 
 import 'settings_widgets.dart';
 import '../../data/banks.dart';
+import '../../models/account_models.dart';
+import '../../services/account_store.dart';
+import '../../services/api_exception.dart';
+import '../../services/fliq_api.dart';
 
 class AccountsSettingsScreen extends StatefulWidget {
   const AccountsSettingsScreen({super.key});
@@ -13,6 +17,49 @@ class AccountsSettingsScreen extends StatefulWidget {
 
 class _AccountsSettingsScreenState extends State<AccountsSettingsScreen> {
   final List<_SavedAccount> _accounts = [];
+  List<Recipient>? _recipients;
+  String? _loadError;
+
+  bool get _isSignedIn => AccountStore.instance.isSignedIn;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isSignedIn) _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final recipients = await FliqApi.instance.recipients();
+      if (mounted) setState(() => _recipients = recipients);
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _loadError = error.message);
+    }
+  }
+
+  List<Widget> _tiles({required bool own}) {
+    if (!_isSignedIn) {
+      if (!own) return const [];
+      return [
+        for (final account in _accounts)
+          SettingsTile(
+            title: '${account.bank}\n${account.accountNumber}',
+            icon: Icons.account_balance_outlined,
+            showDivider: false,
+          ),
+      ];
+    }
+    return [
+      for (final recipient in _recipients ?? const <Recipient>[])
+        if (recipient.own == own)
+          SettingsTile(
+            title:
+                '${recipient.accountName}\n${recipient.bankName} •••• ${recipient.last4}',
+            icon: Icons.account_balance_outlined,
+            showDivider: false,
+          ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,17 +82,16 @@ class _AccountsSettingsScreenState extends State<AccountsSettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          if (_accounts.isEmpty)
+          if (_isSignedIn && _recipients == null && _loadError == null)
+            const Center(child: CircularProgressIndicator())
+          else if (_loadError != null)
+            InfoCard(text: _loadError!)
+          else if (_tiles(own: true).isEmpty)
             const InfoCard(
               text: 'Add your own account so cashing out is one tap.',
             )
           else
-            for (final account in _accounts)
-              SettingsTile(
-                title: '${account.bank}\n${account.accountNumber}',
-                icon: Icons.account_balance_outlined,
-                showDivider: false,
-              ),
+            ..._tiles(own: true),
           const SizedBox(height: 38),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 24),
@@ -60,9 +106,13 @@ class _AccountsSettingsScreenState extends State<AccountsSettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          const InfoCard(
-            text: 'Accounts you pay with "Save this account" on show up here.',
-          ),
+          if (_tiles(own: false).isEmpty)
+            const InfoCard(
+              text:
+                  'Accounts you pay with "Save this account" on show up here.',
+            )
+          else
+            ..._tiles(own: false),
           const Spacer(),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
@@ -71,14 +121,16 @@ class _AccountsSettingsScreenState extends State<AccountsSettingsScreen> {
               child: FilledButton.icon(
                 key: const ValueKey('add-account'),
                 onPressed: () async {
-                  final account = await Navigator.of(context)
-                      .push<_SavedAccount>(
-                        MaterialPageRoute<_SavedAccount>(
-                          builder: (_) => const NewAccountScreen(),
-                        ),
-                      );
-                  if (account != null && mounted) {
-                    setState(() => _accounts.add(account));
+                  final result = await Navigator.of(context).push<Object>(
+                    MaterialPageRoute<Object>(
+                      builder: (_) => const NewAccountScreen(),
+                    ),
+                  );
+                  if (!mounted) return;
+                  if (result is _SavedAccount) {
+                    setState(() => _accounts.add(result));
+                  } else if (result is Recipient) {
+                    await _load();
                   }
                 },
                 icon: const Icon(Icons.add),
@@ -127,6 +179,45 @@ class _NewAccountScreenState extends State<NewAccountScreen> {
 
   int get _maxDigits => Banks.accountNumberLength[_country]!;
   bool _saveAccount = true;
+
+  /// Banks from the server, by country, once signed in.
+  final Map<String, List<Institution>> _institutions = {};
+  bool _isSaving = false;
+  String? _saveError;
+
+  bool get _isSignedIn => AccountStore.instance.isSignedIn;
+  String get _countryCode => _country == 'Kenya' ? 'ke' : 'ng';
+
+  List<String> get _bankNames {
+    final fromServer = _institutions[_country];
+    if (fromServer != null && fromServer.isNotEmpty) {
+      return [for (final bank in fromServer) bank.name];
+    }
+    return _banksByCountry[_country]!;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isSignedIn) _loadBanks();
+  }
+
+  Future<void> _loadBanks() async {
+    final country = _country;
+    if (_institutions.containsKey(country)) return;
+    try {
+      final banks = await FliqApi.instance.institutions(_countryCode);
+      if (!mounted) return;
+      setState(() {
+        _institutions[country] = banks;
+        if (country == _country && !_bankNames.contains(_bank)) {
+          _bank = _bankNames.first;
+        }
+      });
+    } on ApiException {
+      // Keep the built-in list; saving will still check with the bank.
+    }
+  }
 
   @override
   void dispose() {
@@ -294,6 +385,15 @@ class _NewAccountScreenState extends State<NewAccountScreen> {
               ],
             ),
           ),
+          if (_saveError != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+              child: Text(
+                _saveError!,
+                key: const ValueKey('new-account-error'),
+                style: const TextStyle(color: Color(0xFFE65D66), fontSize: 14),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             child: SizedBox(
@@ -301,7 +401,7 @@ class _NewAccountScreenState extends State<NewAccountScreen> {
               height: 56,
               child: OutlinedButton(
                 key: const ValueKey('continue-new-account'),
-                onPressed: canContinue ? _continue : null,
+                onPressed: canContinue && !_isSaving ? _continue : null,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
                   disabledForegroundColor: const Color(0xFF595959),
@@ -314,10 +414,19 @@ class _NewAccountScreenState extends State<NewAccountScreen> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child: const Text(
-                  'Continue',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                ),
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text(
+                        'Continue',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
               ),
             ),
           ),
@@ -326,11 +435,48 @@ class _NewAccountScreenState extends State<NewAccountScreen> {
     );
   }
 
+  Future<void> _saveOnServer() async {
+    final bank = _institutions[_country]?.firstWhere(
+      (institution) => institution.name == _bank,
+      orElse: () => const Institution(code: '', name: ''),
+    );
+    if (bank == null || bank.code.isEmpty) {
+      setState(
+        () =>
+            _saveError = "Couldn't load the bank list. Check your connection.",
+      );
+      return;
+    }
+    setState(() {
+      _isSaving = true;
+      _saveError = null;
+    });
+    try {
+      final recipient = await FliqApi.instance.saveRecipient(
+        bankCode: bank.code,
+        number: _accountController.text,
+        country: _countryCode,
+        own: true,
+      );
+      if (mounted) Navigator.of(context).pop(recipient);
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(
+          () => _saveError = error.status == 404
+              ? "The bank couldn't find that account. Check the number."
+              : error.message,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   void _selectCountry(String country) {
     if (_country == country) return;
     setState(() {
       _country = country;
-      _bank = _banksByCountry[country]!.first;
+      _bank = _bankNames.first;
       if (_accountController.text.length > _maxDigits) {
         _accountController.text = _accountController.text.substring(
           0,
@@ -338,6 +484,7 @@ class _NewAccountScreenState extends State<NewAccountScreen> {
         );
       }
     });
+    if (_isSignedIn) _loadBanks();
   }
 
   Future<void> _showBankPicker() async {
@@ -350,7 +497,7 @@ class _NewAccountScreenState extends State<NewAccountScreen> {
       ),
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) {
-          final banks = _banksByCountry[_country]!
+          final banks = _bankNames
               .where(
                 (bank) => bank.toLowerCase().contains(
                   searchQuery.trim().toLowerCase(),
@@ -440,8 +587,12 @@ class _NewAccountScreenState extends State<NewAccountScreen> {
     if (selected != null && mounted) setState(() => _bank = selected);
   }
 
-  void _continue() {
+  Future<void> _continue() async {
     FocusScope.of(context).unfocus();
+    if (_isSignedIn) {
+      await _saveOnServer();
+      return;
+    }
     Navigator.of(context).pop(
       _SavedAccount(
         bank: _bank,
