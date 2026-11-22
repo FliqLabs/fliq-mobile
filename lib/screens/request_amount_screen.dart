@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../utils/amount_input.dart';
 import '../widgets/amount_keypad.dart';
 import '../widgets/circle_icon_button.dart';
+import '../widgets/flow_exit.dart';
 import 'pay_link_screen.dart';
 
 class RequestAmountScreen extends StatefulWidget {
@@ -43,7 +44,7 @@ class _RequestAmountScreenState extends State<RequestAmountScreen> {
       ),
     );
     // ✕ on the pay link closes the whole request flow.
-    if (closed == true && mounted) Navigator.of(context).pop();
+    if (closed == true && mounted) Navigator.of(context).pop(FlowExit.close);
   }
 
   @override
@@ -77,8 +78,8 @@ class _RequestAmountScreenState extends State<RequestAmountScreen> {
               child: Column(
                 children: [
                   _RequestHeader(
-                    onBack: () => Navigator.of(context).pop(),
-                    onClose: () => Navigator.of(context).pop(),
+                    onBack: () => Navigator.of(context).pop(FlowExit.back),
+                    onClose: () => Navigator.of(context).pop(FlowExit.close),
                   ),
                   const SizedBox(height: 36),
                   const Text(

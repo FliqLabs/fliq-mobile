@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'fliq_symbol.dart';
+import 'flow_exit.dart';
 import 'logos.dart';
 import '../services/account_store.dart';
 
@@ -9,8 +10,9 @@ enum ReceiveMethod { bankTransfer, fliqName, externalWallet }
 class ReceiveActionSheet extends StatelessWidget {
   const ReceiveActionSheet({super.key});
 
-  static Future<ReceiveMethod?> show(BuildContext context) {
-    return showModalBottomSheet<ReceiveMethod>(
+  /// A [ReceiveMethod], [FlowExit.back] for Back, or null when closed.
+  static Future<Object?> show(BuildContext context) {
+    return showModalBottomSheet<Object>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -56,7 +58,7 @@ class ReceiveActionSheet extends StatelessWidget {
                       key: const ValueKey('receive-back'),
                       icon: Icons.arrow_back_ios_new_rounded,
                       tooltip: 'Back',
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () => Navigator.pop(context, FlowExit.back),
                     ),
                     _ReceiveRoundButton(
                       key: const ValueKey('receive-close'),

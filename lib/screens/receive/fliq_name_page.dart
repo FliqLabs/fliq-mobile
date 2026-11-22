@@ -11,8 +11,8 @@ import '../../services/account_store.dart';
 class FliqNamePage extends StatelessWidget {
   const FliqNamePage({super.key});
 
-  static Future<void> show(BuildContext context) =>
-      showFliqSheet<void>(context, builder: (_) => const FliqNamePage());
+  static Future<Object?> show(BuildContext context) =>
+      showFliqSheet<Object>(context, builder: (_) => const FliqNamePage());
 
   @override
   Widget build(BuildContext context) {

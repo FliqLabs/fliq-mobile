@@ -5,6 +5,7 @@ import 'new_recipient_screen.dart';
 import 'qr_scanner_screen.dart';
 import 'send_amount_screen.dart';
 import '../widgets/circle_icon_button.dart';
+import '../widgets/flow_exit.dart';
 import '../widgets/fliq_symbol.dart';
 
 class PayToScreen extends StatefulWidget {
@@ -82,8 +83,8 @@ class _PayToScreenState extends State<PayToScreen> {
             child: Column(
               children: [
                 _PayToHeader(
-                  onBack: () => Navigator.of(context).pop(),
-                  onClose: () => Navigator.of(context).pop(),
+                  onBack: () => Navigator.of(context).pop(FlowExit.back),
+                  onClose: () => Navigator.of(context).pop(FlowExit.close),
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),

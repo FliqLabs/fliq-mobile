@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'flow_exit.dart';
+
 /// Opens a tall, rounded bottom sheet with its own navigation stack.
 ///
 /// Screens pushed inside the sheet (for example currency → network →
@@ -139,7 +141,7 @@ class FliqSheetBackButton extends StatelessWidget {
         if (navigator.canPop()) {
           navigator.pop();
         } else {
-          closeFliqSheet<void>(context);
+          closeFliqSheet<FlowExit>(context, FlowExit.back);
         }
       },
     );
@@ -155,7 +157,7 @@ class FliqSheetCloseButton extends StatelessWidget {
       key: const ValueKey('sheet-close'),
       icon: Icons.close_rounded,
       tooltip: 'Close',
-      onPressed: () => closeFliqSheet<void>(context),
+      onPressed: () => closeFliqSheet<FlowExit>(context, FlowExit.close),
     );
   }
 }

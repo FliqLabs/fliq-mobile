@@ -20,8 +20,10 @@ import '../../services/account_store.dart';
 class ChooseCurrencyPage extends StatelessWidget {
   const ChooseCurrencyPage({super.key});
 
-  static Future<void> show(BuildContext context) =>
-      showFliqSheet<void>(context, builder: (_) => const ChooseCurrencyPage());
+  static Future<Object?> show(BuildContext context) => showFliqSheet<Object>(
+    context,
+    builder: (_) => const ChooseCurrencyPage(),
+  );
 
   void _choose(BuildContext context, CryptoAsset asset) {
     pushInSheet<void>(

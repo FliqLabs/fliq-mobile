@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../models/transaction.dart';
 import '../utils/formatters.dart';
+import '../widgets/flow_exit.dart';
 import '../widgets/fliq_wordmark.dart';
 import '../widgets/receipt_sheet.dart';
 import '../widgets/transaction_tile.dart';
@@ -56,25 +57,30 @@ class _HomeScreenState extends State<HomeScreen> {
     AccountStore.instance.refresh();
   }
 
+  /// "What do you want to do?". Back from an option comes back here;
+  /// Close goes Home, as on the iPhone app.
   Future<void> _openTransferMenu() async {
-    final action = await TransferActionSheet.show(context);
-    if (!mounted || action == null) return;
-
-    switch (action) {
-      case TransferAction.send:
-        await Navigator.of(context)
-            .push<void>(MaterialPageRoute(builder: (_) => const PayToScreen()));
-      case TransferAction.request:
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute(builder: (_) => const RequestAmountScreen()),
-        );
-      case TransferAction.receive:
-        await startReceiveFlow(context);
-      case TransferAction.scan:
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute(builder: (_) => const QrScannerScreen()),
-        );
+    while (true) {
+      if (!mounted) return;
+      final action = await TransferActionSheet.show(context);
+      if (!mounted || action == null) return;
+      final exit = await _open(action);
+      if (exit != FlowExit.back) return;
     }
+  }
+
+  Future<FlowExit> _open(TransferAction action) async {
+    if (action == TransferAction.receive) return startReceiveFlow(context);
+    final page = switch (action) {
+      TransferAction.send => const PayToScreen(),
+      TransferAction.request => const RequestAmountScreen(),
+      _ => const QrScannerScreen(),
+    };
+    final exit = await Navigator.of(context)
+        .push<Object>(MaterialPageRoute(builder: (_) => page));
+    if (action == TransferAction.scan) return FlowExit.close;
+    // A page's Back button, or the phone's back gesture (null), is Back.
+    return exit == FlowExit.close ? FlowExit.close : FlowExit.back;
   }
 
   @override
