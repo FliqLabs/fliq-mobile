@@ -54,8 +54,13 @@ class AccountStore extends ChangeNotifier {
     _api.onSignedOut = _forget;
     notifyListeners();
     // Load in the background; the first screen shows as soon as possible.
-    if (_isSignedIn) unawaited(refresh());
+    if (_isSignedIn) unawaited(_loading = refresh());
   }
+
+  Future<void>? _loading;
+
+  /// Completes once the first load after [start] is done.
+  Future<void> get ready => _loading ?? Future.value();
 
   /// Called right after a successful sign-in.
   Future<void> signedIn(User user) async {
@@ -72,13 +77,14 @@ class AccountStore extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
+      // The profile first: a new account has no name, and so no vault yet.
+      final user = await _api.me();
+      _user = user;
       final results = await Future.wait([
-        _api.me(),
-        if (_user?.hasName ?? true) _api.vaultBalance(),
+        if (user.hasName) _api.vaultBalance(),
         _api.activity(),
       ]);
-      _user = results.first as User;
-      if (results.length == 3) _balance = results[1] as VaultBalance;
+      if (user.hasName) _balance = results.first as VaultBalance;
       _transactions = results.last as List<Transaction>;
       _error = null;
     } on ApiException catch (error) {

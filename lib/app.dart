@@ -17,7 +17,7 @@ class FliqApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Fliq',
+      title: 'fliq',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       // A saved session opens at the lock screen; otherwise at Welcome.

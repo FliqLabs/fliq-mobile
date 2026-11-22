@@ -160,3 +160,126 @@ String providerName(String id) => switch (id) {
   'paj' => 'Paj',
   _ => id.isEmpty ? id : id[0].toUpperCase() + id.substring(1),
 };
+
+/// What `POST /relays` says about a signed transfer.
+class RelayResult {
+  const RelayResult({
+    required this.status,
+    required this.delegateHash,
+    this.txHash,
+    this.failures = const [],
+  });
+
+  factory RelayResult.fromJson(Map<String, dynamic> json) => RelayResult(
+    status: json['status'] as String,
+    delegateHash: json['delegate_hash'] as String,
+    txHash: json['tx_hash'] as String?,
+    failures: [
+      for (final failure in json['failures'] as List<dynamic>? ?? const [])
+        failure.toString(),
+    ],
+  );
+
+  /// `succeeded`, `failed` or `pending`.
+  final String status;
+  final String delegateHash;
+  final String? txHash;
+  final List<String> failures;
+
+  bool get isPending => status == 'pending';
+  bool get succeeded => status == 'succeeded';
+}
+
+/// A cash-out to a bank or mobile-money account, from `/payouts`.
+class Payout {
+  const Payout({
+    required this.payoutId,
+    required this.state,
+    required this.accountName,
+    required this.amountUsd,
+    required this.receive,
+    required this.currency,
+    required this.rate,
+    required this.provider,
+    required this.depositChain,
+    required this.depositAddress,
+    required this.depositAmount,
+    this.bankReference,
+    this.seconds,
+  });
+
+  factory Payout.fromJson(Map<String, dynamic> json) {
+    final deposit = json['deposit'] as Map<String, dynamic>? ?? const {};
+    return Payout(
+      payoutId: json['payout_id'] as String,
+      state: json['state'] as String,
+      accountName: json['account_name'] as String? ?? '',
+      amountUsd: double.tryParse(json['amount'].toString()) ?? 0,
+      receive: (json['receive'] as num?)?.toDouble() ?? 0,
+      currency: (json['currency'] as String? ?? 'ngn').toUpperCase(),
+      rate: (json['rate'] as num?)?.toDouble() ?? 0,
+      provider: json['provider'] as String? ?? '',
+      depositChain: deposit['chain'] as String? ?? '',
+      depositAddress: deposit['address'] as String? ?? '',
+      depositAmount: deposit['amount']?.toString() ?? '0',
+      bankReference: json['bank_reference'] as String?,
+      seconds: json['seconds'] as int?,
+    );
+  }
+
+  final String payoutId;
+
+  /// e.g. `awaiting_deposit`, `paying_out`, `settled`, `refunded`.
+  final String state;
+  final String accountName;
+  final double amountUsd;
+  final double receive;
+  final String currency;
+  final double rate;
+  final String provider;
+
+  /// Where the vault must send the USDC for this order.
+  final String depositChain;
+  final String depositAddress;
+  final String depositAmount;
+
+  /// The bank's own reference (NIP session in Nigeria), once paid.
+  final String? bankReference;
+
+  /// How long the payout took, once paid.
+  final int? seconds;
+
+  bool get isPaid => state == 'settled';
+  bool get isRefunded => state == 'refunded' || state == 'refunding';
+  bool get hasFailed =>
+      const {'failed', 'expired', 'refused', 'not_received'}.contains(state);
+  bool get isFinished => isPaid || isRefunded || hasFailed;
+}
+
+/// Whether a fliq name can be claimed, from `GET /names/{name}`.
+class NameAvailability {
+  const NameAvailability({required this.available, this.reason});
+
+  factory NameAvailability.fromJson(Map<String, dynamic> json) =>
+      NameAvailability(
+        available: json['available'] as bool? ?? false,
+        reason: json['reason'] as String?,
+      );
+
+  final bool available;
+
+  /// `taken`, `invalid` or `reserved`.
+  final String? reason;
+}
+
+/// Lowercase letters, digits and single hyphens, 2 to 32 long, no hyphen at
+/// either end. Null when [raw] isn't a valid fliq name.
+String? validFliqName(String raw) {
+  final name = raw.trim().toLowerCase().replaceFirst('@', '');
+  final ok =
+      RegExp(r'^[a-z0-9-]{2,32}$').hasMatch(name) &&
+      !name.startsWith('-') &&
+      !name.endsWith('-') &&
+      !name.contains('--');
+  return ok ? name : null;
+}

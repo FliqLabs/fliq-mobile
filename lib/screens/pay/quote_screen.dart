@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import '../../models/payment.dart';
 import '../../services/account_store.dart';
 import '../../services/api_exception.dart';
-import '../../services/biometric_authenticator.dart';
 import '../../services/fliq_api.dart';
+import '../../near/device_key.dart';
 import '../../services/payouts.dart';
+import '../../services/vault_signer.dart';
+import 'payout_result_screen.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/circle_icon_button.dart';
 import 'payout_amount_screen.dart';
@@ -22,7 +24,6 @@ class QuoteScreen extends StatefulWidget {
     required this.amount,
     required this.receiveLocal,
     this.mobileMoney = false,
-    this.authenticator = const LocalBiometricAuthenticator(),
     super.key,
   });
 
@@ -33,7 +34,6 @@ class QuoteScreen extends StatefulWidget {
   final double amount;
   final bool receiveLocal;
   final bool mobileMoney;
-  final BiometricAuthenticator authenticator;
 
   @override
   State<QuoteScreen> createState() => _QuoteScreenState();
@@ -100,18 +100,44 @@ class _QuoteScreenState extends State<QuoteScreen> {
     final quote = _quote;
     if (quote == null || _isConfirming) return;
     setState(() => _isConfirming = true);
+    late final Future<Payout> sending;
+    var opened = false;
+    void openResult() {
+      if (opened || !mounted) return;
+      opened = true;
+      Navigator.of(context).pushReplacement<void, void>(
+        MaterialPageRoute(
+          builder: (_) => PayoutResultScreen(
+            payout: sending,
+            account: widget.account,
+            currency: widget.currency,
+          ),
+        ),
+      );
+    }
+
+    // Biometrics are asked when the phone signs, inside send().
+    sending = Payouts.instance.send(
+      quote,
+      widget.account,
+      onReleased: openResult,
+    );
     try {
-      final authenticated = await widget.authenticator.authenticate();
-      if (!mounted || !authenticated) return;
-      await Payouts.instance.send(quote, widget.account);
+      await sending;
+    } on SigningCancelled {
+      // The user backed out of biometrics: nothing moved.
     } on PayoutNotReady catch (error) {
-      if (mounted) _show(error.message);
+      if (mounted && !opened) _show(error.message);
+    } on TransferProblem catch (error) {
+      if (mounted && !opened) _show(error.message);
     } on ApiException catch (error) {
-      if (mounted) _show(error.message);
+      if (mounted && !opened) _show(error.message);
     } on PlatformException {
-      if (mounted) _show('Biometric unlock is unavailable. Please try again.');
+      if (mounted && !opened) {
+        _show('Biometric unlock is unavailable. Please try again.');
+      }
     } finally {
-      if (mounted) setState(() => _isConfirming = false);
+      if (mounted && !opened) setState(() => _isConfirming = false);
     }
   }
 

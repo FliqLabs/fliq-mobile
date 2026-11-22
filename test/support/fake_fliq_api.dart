@@ -1,4 +1,5 @@
 import 'package:fliq/models/account_models.dart';
+import 'package:fliq/models/agent.dart';
 import 'package:fliq/models/deposit.dart';
 import 'package:fliq/models/payment.dart';
 import 'package:fliq/models/rate.dart';
@@ -12,7 +13,7 @@ import 'package:fliq/services/session_store.dart';
 /// Values are copied from the canonical fixtures in the Fliq repo
 /// (`spec/fixtures`).
 class FakeFliqApi extends FliqApi {
-  FakeFliqApi({bool signedIn = false})
+  FakeFliqApi({bool signedIn = false, bool hasName = true})
     : super(
         sessions: MemorySessionStore(
           signedIn
@@ -23,7 +24,9 @@ class FakeFliqApi extends FliqApi {
                 )
               : null,
         ),
-      );
+      ) {
+    if (!hasName) currentUser = const User(userId: 'usr_5d1c0a9e');
+  }
 
   static const goodToken = 'el_good_token';
 
@@ -34,6 +37,8 @@ class FakeFliqApi extends FliqApi {
     vault: 'fliq-vault.testnet',
   );
 
+  User currentUser = user;
+  String? claimedWithKey;
   final sentLinksTo = <String>[];
   final recipientsList = <Recipient>[
     const Recipient(
@@ -95,7 +100,7 @@ class FakeFliqApi extends FliqApi {
   Future<void> signOut() => sessions.clear();
 
   @override
-  Future<User> me() async => user;
+  Future<User> me() async => currentUser;
 
   @override
   Future<VaultBalance> vaultBalance() async =>
@@ -318,4 +323,128 @@ class FakeFliqApi extends FliqApi {
     ],
     'expires_in': 90,
   });
+
+  final relayed = <String>[];
+  var relayPendingFirst = true;
+  int payoutPolls = 0;
+
+  @override
+  Future<RelayResult> relay(
+    String signedDelegate, {
+    String? requestCode,
+  }) async {
+    relayed.add(signedDelegate);
+    return RelayResult(
+      status: relayPendingFirst ? 'pending' : 'succeeded',
+      delegateHash: 'dh_${relayed.length}',
+    );
+  }
+
+  @override
+  Future<RelayResult> relayResult(String delegateHash) async =>
+      RelayResult(status: 'succeeded', delegateHash: delegateHash);
+
+  @override
+  Future<Payout> createPayout({
+    required String quoteId,
+    required VerifiedAccount account,
+    required String idempotencyKey,
+  }) async => Payout.fromJson(_payout('awaiting_deposit'));
+
+  @override
+  Future<Payout> payout(String payoutId) async {
+    payoutPolls++;
+    return Payout.fromJson(_payout('settled'));
+  }
+
+  static Map<String, dynamic> _payout(String state) => {
+    'payout_id': 'po_9c2f71aa',
+    'state': state,
+    'account_name': 'DARA OKONKWO',
+    'amount': '50.00',
+    'receive': 68816,
+    'currency': 'ngn',
+    'rate': 1376.32,
+    'provider': 'paycrest',
+    'deposit': {
+      'chain': 'near',
+      'address': 'po-9c2f71aa.paycrest.testnet',
+      'amount': '50.00',
+    },
+    'bank_reference': state == 'settled' ? '000013251029140213' : null,
+    'seconds': state == 'settled' ? 21 : null,
+  };
+
+  @override
+  Future<NameAvailability> checkName(String name) async => NameAvailability(
+    available: name != 'dara',
+    reason: name == 'dara' ? 'taken' : null,
+  );
+
+  @override
+  Future<User> claimName(String name, {required String publicKey}) async {
+    claimedWithKey = publicKey;
+    currentUser = User(
+      userId: 'usr_5d1c0a9e',
+      nearAccount: '$name.fliq.near',
+      vault: 'fliq-vault.testnet',
+    );
+    return currentUser;
+  }
+
+  final agentList = <Map<String, dynamic>>[];
+  final connectedKeys = <String>[];
+
+  static Map<String, dynamic> _agent(String name, String state) => {
+    'agent_id': '${name.toLowerCase()}-frank.fliq.near',
+    'name': name,
+    'public_key': 'ed25519:5FjQ8mT3vXk2NcR7yLpW9sBdH4uZaE6gKoJt1qMi9kQ',
+    'state': state,
+    'daily_cap': {'amount': '30000', 'currency': 'NGN'},
+    'per_payout_cap': {'amount': '15000', 'currency': 'NGN'},
+    'currencies': ['KES', 'NGN'],
+    'saved_accounts_only': true,
+    'spent_today': {'amount': '0', 'currency': 'NGN'},
+  };
+
+  static List<SignStep> _steps(String method) => [
+    SignStep.fromJson({
+      'kind': 'function_call',
+      'receiver_id': 'fliq-vault.testnet',
+      'method_name': method,
+      'args': {
+        'agent_id': 'claude-frank.fliq.near',
+        'per_payout_cap': '36330000',
+        'corridors': ['NG-NGN-bank'],
+      },
+      'gas': '30000000000000',
+      'deposit': '10000000000000000000000',
+      'public_key': null,
+    })!,
+  ];
+
+  @override
+  Future<List<Agent>> agents() async => [
+    for (final agent in agentList) Agent.fromJson(agent),
+  ];
+
+  @override
+  Future<(Agent, List<SignStep>)> connectAgent({
+    required String name,
+    required String publicKey,
+    required Map<String, dynamic> limits,
+  }) async {
+    connectedKeys.add(publicKey);
+    agentList.add(_agent(name, 'active'));
+    return (Agent.fromJson(_agent(name, 'pending')), _steps('set_agent'));
+  }
+
+  @override
+  Future<(Agent, List<SignStep>)> revokeAgent(String agentId) async {
+    agentList.removeWhere((a) => a['agent_id'] == agentId);
+    return (
+      Agent.fromJson(_agent('Claude', 'revoked')),
+      _steps('remove_agent'),
+    );
+  }
 }

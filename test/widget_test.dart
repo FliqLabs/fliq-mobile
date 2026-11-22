@@ -56,6 +56,7 @@ void main() {
     final authenticator = _FakeBiometricAuthenticator();
     FliqApi.instance = FakeFliqApi(signedIn: true);
     await AccountStore.instance.start();
+    await AccountStore.instance.ready;
     await tester.pumpWidget(FliqApp(biometricAuthenticator: authenticator));
     await tester.pumpAndSettle();
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/transaction.dart';
+import '../services/account_store.dart';
 import '../utils/formatters.dart';
 import '../widgets/receipt_sheet.dart';
 import '../widgets/transaction_tile.dart';
@@ -80,9 +81,16 @@ class _ActivityViewState extends State<ActivityView> {
           Expanded(
             child: items.isEmpty
                 ? _EmptyActivity(onReceive: widget.onReceive)
-                : ListView(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    children: _buildGroups(items),
+                : RefreshIndicator(
+                    // Pull down to load the latest from the server.
+                    onRefresh: AccountStore.instance.refresh,
+                    color: Colors.black,
+                    backgroundColor: Colors.white,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 16),
+                      children: _buildGroups(items),
+                    ),
                   ),
           ),
         ],

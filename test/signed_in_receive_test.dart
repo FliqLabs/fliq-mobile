@@ -19,6 +19,7 @@ void main() {
     AccountStore.instance = AccountStore();
     DepositAddresses.instance = DepositAddresses();
     await AccountStore.instance.start();
+    await AccountStore.instance.ready;
   });
 
   void usePhone(WidgetTester tester) {

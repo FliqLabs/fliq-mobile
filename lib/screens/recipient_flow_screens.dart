@@ -9,9 +9,11 @@ import 'send_amount_screen.dart';
 import '../models/payment.dart';
 import '../services/account_store.dart';
 import '../services/api_exception.dart';
-import '../services/biometric_authenticator.dart';
 import '../services/fliq_api.dart';
+import '../near/device_key.dart';
 import '../services/payouts.dart';
+import '../services/vault_signer.dart';
+import 'pay/payout_result_screen.dart';
 import '../utils/amount_input.dart';
 import '../widgets/amount_keypad.dart';
 import '../data/sample_data.dart';
@@ -510,26 +512,37 @@ class _FliqRecipientScreenState extends State<FliqRecipientScreen> {
     final person = _person;
     if (person == null || !_canPay) return;
     setState(() => _isPaying = true);
+    String? problem;
     try {
-      final authenticated = await const LocalBiometricAuthenticator()
-          .authenticate();
-      if (!mounted || !authenticated) return;
+      // Biometrics are asked when the phone signs.
       await Transfers.instance.sendToPerson(person, _parsedAmount);
+      if (!mounted) return;
+      await Navigator.of(context).pushReplacement<void, void>(
+        MaterialPageRoute(
+          builder: (_) =>
+              TransferSentScreen(dollars: _parsedAmount, person: person),
+        ),
+      );
+      return;
+    } on SigningCancelled {
+      // Nothing moved.
     } on PayoutNotReady catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(error.message),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-      }
+      problem = error.message;
+    } on TransferProblem catch (error) {
+      problem = error.message;
+    } on ApiException catch (error) {
+      problem = error.message;
     } catch (_) {
-      // Biometrics unavailable or cancelled: nothing happened.
+      problem = 'Biometric unlock is unavailable. Please try again.';
     } finally {
       if (mounted) setState(() => _isPaying = false);
+    }
+    if (problem != null && mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(problem), behavior: SnackBarBehavior.floating),
+        );
     }
   }
 

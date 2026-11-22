@@ -21,6 +21,7 @@ void main() {
     FliqApi.instance = api;
     AccountStore.instance = AccountStore();
     await AccountStore.instance.start();
+    await AccountStore.instance.ready;
   });
 
   void usePhone(WidgetTester tester) {

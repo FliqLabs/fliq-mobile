@@ -5,7 +5,15 @@ import 'package:local_auth/local_auth.dart';
 import '../../services/biometric_authenticator.dart';
 import '../../utils/formatters.dart';
 import 'settings_widgets.dart';
+import '../../models/agent.dart';
+import '../../near/device_key.dart';
+import '../../near/near_format.dart';
 import '../../services/account_store.dart';
+import '../../services/agents.dart';
+import '../../services/api_exception.dart';
+import '../../services/payouts.dart';
+import '../../services/vault_signer.dart';
+import '../../utils/clipboard_share.dart';
 
 /// An agent you have connected, and the limits it must stay within.
 class AgentConnection {
@@ -17,7 +25,35 @@ class AgentConnection {
     required this.paysKenya,
     required this.savedAccountsOnly,
     this.spentToday = 0,
+    this.agentId,
+    this.state = 'pending',
   });
+
+  factory AgentConnection.fromAgent(Agent agent) => AgentConnection(
+    name: agent.name,
+    perDay: agent.dailyCap,
+    perPayment: agent.perPayoutCap,
+    paysNigeria: agent.currencies.contains('NGN'),
+    paysKenya: agent.currencies.contains('KES'),
+    savedAccountsOnly: agent.savedAccountsOnly,
+    spentToday: agent.spentToday,
+    agentId: agent.agentId,
+    state: agent.state,
+  );
+
+  /// The agent's NEAR account once the server knows it; null in the demo.
+  final String? agentId;
+
+  /// `pending`, `active` or `revoked`.
+  final String state;
+
+  AgentPolicy get policy => AgentPolicy(
+    dailyCap: perDay,
+    perPayout: perPayment,
+    paysNigeria: paysNigeria,
+    paysKenya: paysKenya,
+    savedAccountsOnly: savedAccountsOnly,
+  );
 
   final String name;
   final int perDay;
@@ -50,13 +86,51 @@ class AgentsSettingsScreen extends StatefulWidget {
 class _AgentsSettingsScreenState extends State<AgentsSettingsScreen> {
   final List<AgentConnection> _agents = [];
 
+  bool get _isSignedIn => AccountStore.instance.isSignedIn;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isSignedIn) _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final agents = await Agents.instance.list();
+      if (!mounted) return;
+      setState(() {
+        _agents
+          ..clear()
+          ..addAll([
+            for (final agent in agents)
+              if (agent.state != 'revoked') AgentConnection.fromAgent(agent),
+          ]);
+      });
+    } on ApiException catch (error) {
+      if (mounted) _say(error.message);
+    }
+  }
+
+  void _say(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
+  }
+
   Future<void> _connect() async {
     final agent = await Navigator.of(context).push<AgentConnection>(
       MaterialPageRoute<AgentConnection>(
         builder: (_) => ConnectAgentScreen(authenticator: widget.authenticator),
       ),
     );
-    if (agent != null && mounted) setState(() => _agents.add(agent));
+    if (agent == null || !mounted) return;
+    if (_isSignedIn) {
+      await _load();
+    } else {
+      setState(() => _agents.add(agent));
+    }
   }
 
   Future<void> _changeLimits(int index) async {
@@ -69,7 +143,12 @@ class _AgentsSettingsScreenState extends State<AgentsSettingsScreen> {
         ),
       ),
     );
-    if (updated != null && mounted) setState(() => _agents[index] = updated);
+    if (updated == null || !mounted) return;
+    if (_isSignedIn) {
+      await _load();
+    } else {
+      setState(() => _agents[index] = updated);
+    }
   }
 
   Future<void> _revoke(int index) async {
@@ -98,7 +177,24 @@ class _AgentsSettingsScreenState extends State<AgentsSettingsScreen> {
         ],
       ),
     );
-    if (confirmed == true && mounted) setState(() => _agents.removeAt(index));
+    if (confirmed != true || !mounted) return;
+    final agentId = agent.agentId;
+    if (!_isSignedIn || agentId == null) {
+      setState(() => _agents.removeAt(index));
+      return;
+    }
+    try {
+      await Agents.instance.revoke(agentId);
+      await _load();
+    } on SigningCancelled {
+      // Nothing changed.
+    } on PayoutNotReady catch (error) {
+      if (mounted) _say(error.message);
+    } on TransferProblem catch (error) {
+      if (mounted) _say(error.message);
+    } on ApiException catch (error) {
+      if (mounted) _say(error.message);
+    }
   }
 
   @override
@@ -181,12 +277,20 @@ class _AgentCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            const Icon(Icons.circle, color: Color(0xFFF5A623), size: 6),
+            Icon(
+              Icons.circle,
+              color: agent.state == 'active'
+                  ? const Color(0xFF2EB467)
+                  : const Color(0xFFF5A623),
+              size: 6,
+            ),
             const SizedBox(width: 4),
-            const Text(
-              'Connecting',
+            Text(
+              agent.state == 'active' ? 'Active' : 'Connecting',
               style: TextStyle(
-                color: Color(0xFFF5A623),
+                color: agent.state == 'active'
+                    ? const Color(0xFF2EB467)
+                    : const Color(0xFFF5A623),
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -407,7 +511,8 @@ class ConnectAgentScreen extends StatelessWidget {
           const SizedBox(height: 12),
           TextButton(
             key: const ValueKey('agent-already-has-key'),
-            onPressed: () => _openAgent(context, 'My agent'),
+            onPressed: () =>
+                _openAgent(context, 'My agent', usesExistingKey: true),
             style: TextButton.styleFrom(
               foregroundColor: const Color(0xFFAAAAAA),
             ),
@@ -418,13 +523,18 @@ class ConnectAgentScreen extends StatelessWidget {
     );
   }
 
-  void _openAgent(BuildContext context, String name) {
+  void _openAgent(
+    BuildContext context,
+    String name, {
+    bool usesExistingKey = false,
+  }) {
     Navigator.of(context)
         .push<AgentConnection>(
           MaterialPageRoute<AgentConnection>(
             builder: (_) => AgentPermissionsScreen(
               name: name,
               authenticator: authenticator,
+              usesExistingKey: usesExistingKey,
             ),
           ),
         )
@@ -531,11 +641,16 @@ class AgentPermissionsScreen extends StatefulWidget {
     required this.name,
     required this.authenticator,
     this.initial,
+    this.usesExistingKey = false,
     super.key,
   });
 
   final String name;
   final BiometricAuthenticator authenticator;
+
+  /// "My agent already has a key": the agent made its own key and shows its
+  /// public half, which is pasted here.
+  final bool usesExistingKey;
 
   /// Existing limits when changing an agent that is already connected.
   final AgentConnection? initial;
@@ -551,12 +666,24 @@ class _AgentPermissionsScreenState extends State<AgentPermissionsScreen> {
   late bool _paysKenya = widget.initial?.paysKenya ?? true;
   late bool _savedAccountsOnly = widget.initial?.savedAccountsOnly ?? true;
   bool _isConnecting = false;
+  final _keyController = TextEditingController();
 
   static const _limitStep = 5000;
 
+  bool get _keyLooksValid => NearKey.decode(_keyController.text.trim()) != null;
+
+  @override
+  void dispose() {
+    _keyController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final canConnect = _paysNigeria || _paysKenya;
+    final canConnect =
+        (_paysNigeria || _paysKenya) &&
+        _perPayment <= _perDay &&
+        (!widget.usesExistingKey || widget.initial != null || _keyLooksValid);
     return SettingsPage(
       title: widget.name,
       child: Column(
@@ -597,6 +724,42 @@ class _AgentPermissionsScreenState extends State<AgentPermissionsScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
+                if (widget.usesExistingKey && widget.initial == null) ...[
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: SectionLabel("YOUR AGENT'S KEY"),
+                  ),
+                  TextField(
+                    key: const ValueKey('agent-existing-key'),
+                    controller: _keyController,
+                    autocorrect: false,
+                    onChanged: (_) => setState(() {}),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontFamily: 'monospace',
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'ed25519:…',
+                      hintStyle: const TextStyle(color: Color(0xFF666666)),
+                      helperText: _keyController.text.isEmpty || _keyLooksValid
+                          ? 'The public key your agent shows'
+                          : 'Paste a key that starts with ed25519:',
+                      helperStyle: TextStyle(
+                        color: _keyController.text.isEmpty || _keyLooksValid
+                            ? const Color(0xFF888888)
+                            : const Color(0xFFF5A623),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFF191919),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
                 const Padding(
                   padding: EdgeInsets.only(bottom: 8),
                   child: SectionLabel('WHAT IT MAY DO'),
@@ -731,7 +894,25 @@ class _AgentPermissionsScreenState extends State<AgentPermissionsScreen> {
     return 'no countries';
   }
 
+  AgentConnection _connection({Agent? from}) => from != null
+      ? AgentConnection.fromAgent(from)
+      : AgentConnection(
+          name: widget.name,
+          perDay: _perDay,
+          perPayment: _perPayment,
+          paysNigeria: _paysNigeria,
+          paysKenya: _paysKenya,
+          savedAccountsOnly: _savedAccountsOnly,
+          spentToday: widget.initial?.spentToday ?? 0,
+          agentId: widget.initial?.agentId,
+          state: widget.initial?.state ?? 'pending',
+        );
+
   Future<void> _connect() async {
+    if (AccountStore.instance.isSignedIn) {
+      await _connectOnServer();
+      return;
+    }
     try {
       final authenticated = await widget.authenticator.authenticate();
       if (!mounted) return;
@@ -743,19 +924,8 @@ class _AgentPermissionsScreenState extends State<AgentPermissionsScreen> {
       await Future<void>.delayed(const Duration(seconds: 2));
       if (!mounted) return;
       setState(() => _isConnecting = false);
-      // The API will create the agent's key here. For now the agent is
-      // added locally so the Agents screen can show it.
-      Navigator.of(context).pop(
-        AgentConnection(
-          name: widget.name,
-          perDay: _perDay,
-          perPayment: _perPayment,
-          paysNigeria: _paysNigeria,
-          paysKenya: _paysKenya,
-          savedAccountsOnly: _savedAccountsOnly,
-          spentToday: widget.initial?.spentToday ?? 0,
-        ),
-      );
+      // Signed out, the agent is only added on this screen, as a demo.
+      Navigator.of(context).pop(_connection());
     } on LocalAuthException catch (error) {
       if (!mounted) return;
       debugPrint('Agent biometric authentication failed: $error');
@@ -766,6 +936,46 @@ class _AgentPermissionsScreenState extends State<AgentPermissionsScreen> {
       _showMessage(
         'Biometric unlock is unavailable. Please try again or use your device passcode.',
       );
+    }
+  }
+
+  /// Signed in: the server creates the agent, this phone signs the vault
+  /// policy, and a new agent's setup is shown once to paste.
+  Future<void> _connectOnServer() async {
+    setState(() => _isConnecting = true);
+    final policy = _connection().policy;
+    try {
+      final initial = widget.initial;
+      if (initial?.agentId != null) {
+        final agent = await Agents.instance.update(initial!.agentId!, policy);
+        if (mounted) Navigator.of(context).pop(_connection(from: agent));
+        return;
+      }
+      final (agent, setup) = await Agents.instance.connect(
+        name: widget.name == 'Another agent' ? 'My agent' : widget.name,
+        app: AgentApp.fromChoice(widget.name),
+        policy: policy,
+        existingPublicKey: widget.usesExistingKey
+            ? _keyController.text.trim()
+            : null,
+      );
+      if (!mounted) return;
+      if (setup != null) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(builder: (_) => AgentSetupScreen(setup: setup)),
+        );
+      }
+      if (mounted) Navigator.of(context).pop(_connection(from: agent));
+    } on SigningCancelled {
+      // Nothing changed.
+    } on PayoutNotReady catch (error) {
+      if (mounted) _showMessage(error.message);
+    } on TransferProblem catch (error) {
+      if (mounted) _showMessage(error.message);
+    } on ApiException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } finally {
+      if (mounted) setState(() => _isConnecting = false);
     }
   }
 
@@ -978,6 +1188,90 @@ class _CountryPermissionChip extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The setup to paste into the agent's app. It holds the agent's secret key,
+/// so it is shown once and never saved.
+class AgentSetupScreen extends StatelessWidget {
+  const AgentSetupScreen({required this.setup, super.key});
+
+  final AgentSetup setup;
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsPage(
+      title: 'Connect ${setup.app.agentName}',
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        children: [
+          Text(
+            setup.app.destination,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'It holds the agent\'s own key. Anyone with it can pay within the '
+            'limits you set, so keep it private. It is shown only once.',
+            style: TextStyle(
+              color: Color(0xFFAAAAAA),
+              fontSize: 14,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            key: const ValueKey('agent-setup-snippet'),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF141414),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF2A2A2A)),
+            ),
+            child: SelectableText(
+              setup.snippet,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontFamily: 'monospace',
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            key: const ValueKey('copy-agent-setup'),
+            onPressed: () => copyWithFeedback(
+              context,
+              setup.snippet,
+              message: 'Setup copied',
+            ),
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label: const Text('Copy'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
+              minimumSize: const Size.fromHeight(52),
+            ),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton(
+            key: const ValueKey('agent-setup-done'),
+            onPressed: () => Navigator.of(context).pop(),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Color(0xFF3A3A3A)),
+              minimumSize: const Size.fromHeight(52),
+            ),
+            child: const Text('Done'),
+          ),
+        ],
       ),
     );
   }

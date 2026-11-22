@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../models/account_models.dart';
+import '../models/agent.dart';
 import '../models/deposit.dart';
 import '../models/payment.dart';
 import '../models/rate.dart';
@@ -315,6 +316,128 @@ class FliqApi {
         Person.fromJson(item as Map<String, dynamic>),
     ];
   }
+
+  /// Hands a delegate signed on this phone to fliq's relayer, which pays
+  /// the gas. A repeat of the same delegate is never paid twice.
+  Future<RelayResult> relay(
+    String signedDelegate, {
+    String? requestCode,
+  }) async => RelayResult.fromJson(
+    await _send(
+      'POST',
+      '/relays',
+      auth: true,
+      body: {'signed_delegate': signedDelegate, 'request_code': ?requestCode},
+    ),
+  );
+
+  Future<RelayResult> relayResult(String delegateHash) async =>
+      RelayResult.fromJson(
+        await _send('GET', '/relays/$delegateHash', auth: true),
+      );
+
+  /// Registers a cash-out for a quote. The money moves only once this phone
+  /// signs the vault's release of it.
+  Future<Payout> createPayout({
+    required String quoteId,
+    required VerifiedAccount account,
+    required String idempotencyKey,
+  }) async => Payout.fromJson(
+    await _send(
+      'POST',
+      '/payouts',
+      auth: true,
+      headers: {'Idempotency-Key': idempotencyKey},
+      body: {
+        'quote_id': quoteId,
+        'account': {'bank': account.bankCode, 'number': account.number},
+        if (!account.nameVerified) 'account_name': account.accountName,
+      },
+    ),
+  );
+
+  Future<Payout> payout(String payoutId) async =>
+      Payout.fromJson(await _send('GET', '/payouts/$payoutId', auth: true));
+
+  Future<NameAvailability> checkName(String name) async =>
+      NameAvailability.fromJson(
+        await _send('GET', '/names/${Uri.encodeComponent(name)}', auth: true),
+      );
+
+  /// Claims a fliq name and creates the NEAR account behind it, owned by
+  /// [publicKey] (this phone's key). The server may still be creating the
+  /// account (202); asking again with the same key finishes it.
+  Future<User> claimName(String name, {required String publicKey}) async {
+    final key = 'claim-$name';
+    for (var attempt = 1; ; attempt++) {
+      Map<String, dynamic>? body;
+      try {
+        body = await _send(
+          'POST',
+          '/me/name',
+          auth: true,
+          headers: {'Idempotency-Key': key},
+          body: {'name': name, 'public_key': publicKey},
+        );
+      } on ApiException catch (error) {
+        // A sleeping relayer answers 503 for a minute; ask again.
+        if (error.status != 503 || attempt >= 12) rethrow;
+      }
+      if (body?['user_id'] != null) return User.fromJson(body!);
+      if (attempt >= 12) {
+        throw const ApiException(
+          code: 'claim_pending',
+          message:
+              'Your account is still being created. Try again in a minute.',
+        );
+      }
+      await Future<void>.delayed(
+        Duration(seconds: 2 * (attempt < 5 ? attempt : 5)),
+      );
+    }
+  }
+
+  Future<List<Agent>> agents() async {
+    final body = await _send('GET', '/agents', auth: true);
+    return [
+      for (final item in body['agents'] as List<dynamic>? ?? const [])
+        Agent.fromJson(item as Map<String, dynamic>),
+    ];
+  }
+
+  /// Connects an agent. The answer is the pending agent and the vault calls
+  /// this phone must sign before the agent can pay.
+  Future<(Agent, List<SignStep>)> connectAgent({
+    required String name,
+    required String publicKey,
+    required Map<String, dynamic> limits,
+  }) async => _agentChange(
+    await _send(
+      'POST',
+      '/agents',
+      auth: true,
+      headers: {'Idempotency-Key': newIdempotencyKey()},
+      body: {'name': name, 'public_key': publicKey, ...limits},
+    ),
+  );
+
+  Future<(Agent, List<SignStep>)> updateAgent(
+    String agentId,
+    Map<String, dynamic> limits,
+  ) async => _agentChange(
+    await _send('PATCH', '/agents/$agentId', auth: true, body: limits),
+  );
+
+  Future<(Agent, List<SignStep>)> revokeAgent(String agentId) async =>
+      _agentChange(await _send('DELETE', '/agents/$agentId', auth: true));
+
+  static (Agent, List<SignStep>) _agentChange(Map<String, dynamic> body) => (
+    Agent.fromJson(body['agent'] as Map<String, dynamic>),
+    [
+      for (final step in body['steps'] as List<dynamic>? ?? const [])
+        ?SignStep.fromJson(step as Map<String, dynamic>),
+    ],
+  );
 
   // ── Plumbing ──────────────────────────────────────────────────────────
 

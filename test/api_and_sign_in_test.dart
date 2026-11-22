@@ -84,6 +84,7 @@ void main() {
     addTearDown(tester.view.reset);
     FliqApi.instance = FakeFliqApi(signedIn: true);
     await AccountStore.instance.start();
+    await AccountStore.instance.ready;
 
     await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
     await tester.pumpAndSettle();
