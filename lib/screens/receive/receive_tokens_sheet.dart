@@ -7,6 +7,7 @@ import '../../utils/formatters.dart';
 import '../../widgets/crypto_icons.dart';
 import '../../widgets/fliq_sheet.dart';
 import '../../widgets/qr_code_card.dart';
+import '../../services/account_store.dart';
 
 /// Quick deposit sheet opened from the QR icon on Home: pick a token and a
 /// network, then share the address.
@@ -176,8 +177,8 @@ class _ReceiveTokensSheetState extends State<ReceiveTokensSheet> {
                           ),
                           const SizedBox(height: 4),
                           if (isNear)
-                            const Text(
-                              '@${SampleData.handle}',
+                            Text(
+                              '@${AccountStore.instance.handle}',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 17,

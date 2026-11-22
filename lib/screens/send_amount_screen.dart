@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../data/sample_data.dart';
 import '../utils/amount_input.dart';
 import '../utils/formatters.dart';
 import '../widgets/amount_keypad.dart';
+import '../services/account_store.dart';
 
 class SendAmountScreen extends StatefulWidget {
   const SendAmountScreen({super.key});
@@ -18,7 +18,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
 
   double get _parsedAmount => double.tryParse(_amount) ?? 0;
 
-  bool get _isOverVault => _parsedAmount > SampleData.vaultBalanceUsd;
+  bool get _isOverVault => _parsedAmount > AccountStore.instance.balanceUsd;
 
   bool get _canContinue => _parsedAmount > 0 && !_isOverVault;
 
@@ -143,7 +143,7 @@ class _SendAmountScreenState extends State<SendAmountScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          formatUsd(SampleData.vaultBalanceUsd),
+                          formatUsd(AccountStore.instance.balanceUsd),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 13,

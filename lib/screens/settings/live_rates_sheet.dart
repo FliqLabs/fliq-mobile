@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../data/sample_data.dart';
+import '../../models/rate.dart';
+import '../../services/fliq_api.dart';
 import '../../utils/formatters.dart';
 
 /// "Live rates": the best naira rate for $1 right now, as a sheet.
-class LiveRatesSheet extends StatelessWidget {
+class LiveRatesSheet extends StatefulWidget {
   const LiveRatesSheet({super.key});
 
   static Future<void> show(BuildContext context) {
@@ -20,8 +21,30 @@ class LiveRatesSheet extends StatelessWidget {
   }
 
   @override
+  State<LiveRatesSheet> createState() => _LiveRatesSheetState();
+}
+
+class _LiveRatesSheetState extends State<LiveRatesSheet> {
+  final Future<Rate> _rate = FliqApi.instance.getRate();
+
+  @override
   Widget build(BuildContext context) {
-    final providers = SampleData.rateProviders;
+    return FutureBuilder<Rate>(
+      future: _rate,
+      builder: (context, snapshot) => _build(context, snapshot),
+    );
+  }
+
+  Widget _build(BuildContext context, AsyncSnapshot<Rate> snapshot) {
+    final rate = snapshot.data;
+    final providerName = rate == null
+        ? ''
+        : rate.provider[0].toUpperCase() + rate.provider.substring(1);
+    final quoting = rate == null
+        ? (snapshot.hasError
+              ? "Can't reach fliq right now"
+              : 'Checking providers…')
+        : 'Best of ${rate.providersQuoting} quoting · $providerName';
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 12, 28),
@@ -69,7 +92,7 @@ class LiveRatesSheet extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    groupDigits(SampleData.usdToNgn, decimals: 2),
+                    rate == null ? '…' : groupDigits(rate.rate, decimals: 2),
                     key: const ValueKey('live-rate'),
                     style: const TextStyle(
                       color: Colors.white,
@@ -83,7 +106,7 @@ class LiveRatesSheet extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Best of ${providers.length} quoting · ${providers.join(', ')}',
+              quoting,
               style: const TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
             ),
             const SizedBox(height: 22),
@@ -97,7 +120,9 @@ class LiveRatesSheet extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    formatNaira(SampleData.usdToNgnBeforeFees, decimals: 2),
+                    rate == null
+                        ? '…'
+                        : formatNaira(rate.rateBeforeFees, decimals: 2),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,

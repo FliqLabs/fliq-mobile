@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 
-import '../../data/sample_data.dart';
 import '../../services/biometric_authenticator.dart';
 import '../../utils/formatters.dart';
 import 'settings_widgets.dart';
+import '../../services/account_store.dart';
 
 /// An agent you have connected, and the limits it must stay within.
 class AgentConnection {
@@ -125,8 +125,8 @@ class _AgentsSettingsScreenState extends State<AgentsSettingsScreen> {
                   trailing: const Icon(Icons.add, color: Colors.white),
                   onTap: _connect,
                 ),
-                const SettingsTile(
-                  title: 'Enforced by\n${SampleData.nearAccount}',
+                SettingsTile(
+                  title: 'Enforced by\n${AccountStore.instance.nearAccount}',
                   trailing: Icon(
                     Icons.verified_user_outlined,
                     color: Color(0xFF777777),

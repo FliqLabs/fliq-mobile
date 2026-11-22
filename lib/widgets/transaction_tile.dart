@@ -11,6 +11,9 @@ Color statusColor(TransactionStatus status) => switch (status) {
   TransactionStatus.completed => statusGreen,
   TransactionStatus.pending => const Color(0xFFAAAAAA),
   TransactionStatus.notReceived => statusOrange,
+  TransactionStatus.refused => statusOrange,
+  TransactionStatus.refunded => const Color(0xFFAAAAAA),
+  TransactionStatus.failed => const Color(0xFFE65D66),
 };
 
 /// One transaction row: coin icon, title, time, amount and status.

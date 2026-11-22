@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../data/sample_data.dart';
 import 'fliq_symbol.dart';
+import '../services/account_store.dart';
 
 enum ReceiveMethod { bankTransfer, fliqName, externalWallet }
 
@@ -95,7 +95,7 @@ class ReceiveActionSheet extends StatelessWidget {
               _ReceiveOption(
                 key: const ValueKey('receive-fliq-name'),
                 title: 'Your fliq name',
-                subtitle: 'Share ${SampleData.nearAccount}',
+                subtitle: 'Share ${AccountStore.instance.nearAccount}',
                 icon: Icons.north_east_rounded,
                 iconColor: const Color(0xFF20D99A),
                 leading: const FliqSymbol(

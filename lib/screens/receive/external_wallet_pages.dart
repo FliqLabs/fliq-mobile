@@ -9,6 +9,7 @@ import '../../utils/formatters.dart';
 import '../../widgets/crypto_icons.dart';
 import '../../widgets/fliq_sheet.dart';
 import '../../widgets/qr_code_card.dart';
+import '../../services/account_store.dart';
 
 /// Receiving from an external wallet or exchange, in three steps:
 /// choose a coin → choose a network → show the deposit address.
@@ -409,13 +410,13 @@ class _AddressCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
                       CircleAvatar(
                         radius: 12,
                         backgroundColor: Color(0xFF1D3B2A),
                         child: Text(
-                          SampleData.initials,
+                          AccountStore.instance.initials,
                           style: TextStyle(
                             color: Color(0xFF2EB467),
                             fontSize: 8,
@@ -426,7 +427,7 @@ class _AddressCard extends StatelessWidget {
                       SizedBox(width: 8),
                       Flexible(
                         child: Text(
-                          SampleData.handle,
+                          AccountStore.instance.handle,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: Colors.white,

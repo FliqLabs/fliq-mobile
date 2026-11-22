@@ -5,6 +5,7 @@ import '../../utils/clipboard_share.dart';
 import '../../widgets/crypto_icons.dart';
 import '../../widgets/fliq_sheet.dart';
 import '../../widgets/qr_code_card.dart';
+import '../../services/account_store.dart';
 
 /// "Your fliq name": a QR code other people scan to pay you.
 class FliqNamePage extends StatelessWidget {
@@ -49,16 +50,16 @@ class FliqNamePage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(26),
                   border: Border.all(color: FliqSheetColors.cardBorder),
                 ),
-                child: const Column(
+                child: Column(
                   children: [
                     FliqQrCode(
-                      data: SampleData.nearAccount,
+                      data: AccountStore.instance.nearAccount,
                       size: 230,
                       center: NetworkBadge(network: SampleData.near, size: 30),
                     ),
                     SizedBox(height: 22),
                     Text(
-                      '@${SampleData.handle}',
+                      '@${AccountStore.instance.handle}',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -67,7 +68,7 @@ class FliqNamePage extends StatelessWidget {
                     ),
                     SizedBox(height: 6),
                     Text(
-                      'NEAR wallets: ${SampleData.nearAccount}',
+                      'NEAR wallets: ${AccountStore.instance.nearAccount}',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: FliqSheetColors.muted,
@@ -92,7 +93,7 @@ class FliqNamePage extends StatelessWidget {
                   icon: Icons.copy_rounded,
                   onPressed: () => copyWithFeedback(
                     context,
-                    SampleData.nearAccount,
+                    AccountStore.instance.nearAccount,
                     message: 'NEAR address copied',
                   ),
                 ),
@@ -103,8 +104,8 @@ class FliqNamePage extends StatelessWidget {
                 icon: Icons.share_outlined,
                 tooltip: 'Share',
                 onPressed: () => shareText(
-                  'Pay me on fliq: @${SampleData.handle}\n'
-                  'NEAR address: ${SampleData.nearAccount}',
+                  'Pay me on fliq: @${AccountStore.instance.handle}\n'
+                  'NEAR address: ${AccountStore.instance.nearAccount}',
                 ),
               ),
             ],

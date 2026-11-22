@@ -5,7 +5,10 @@ import 'package:video_player/video_player.dart';
 import '../services/biometric_authenticator.dart';
 import '../widgets/fliq_logo.dart';
 import '../widgets/welcome_button.dart' as welcome;
+import '../services/account_store.dart';
 import 'biometric_lock_screen.dart';
+import 'home_screen.dart';
+import 'sign_in_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({required this.biometricAuthenticator, super.key});
@@ -123,14 +126,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       label: 'Continue with passkey',
                       icon: Icons.person_add_alt_1_outlined,
                       isPrimary: true,
-                      onPressed: () => _showComingSoon(context),
+                      onPressed: _start,
                     ),
                     const SizedBox(height: 12),
                     welcome.WelcomeButton(
                       label: 'I already have an account',
                       icon: Icons.undo_rounded,
                       isPrimary: false,
-                      onPressed: _openBiometricLock,
+                      onPressed: _start,
                     ),
                     const SizedBox(height: 58),
                   ],
@@ -143,24 +146,28 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     );
   }
 
-  void _openBiometricLock() {
-    Navigator.of(context).push(
+  /// Signed in already: unlock. Otherwise sign in with an email link.
+  /// Passkeys on Android need fliq.cash to trust this app first, so both
+  /// buttons use email for now.
+  Future<void> _start() async {
+    final navigator = Navigator.of(context);
+    if (!AccountStore.instance.isSignedIn) {
+      final signedIn = await navigator.push<bool>(
+        MaterialPageRoute(builder: (_) => const SignInScreen()),
+      );
+      if (signedIn != true || !mounted) return;
+      await navigator.pushAndRemoveUntil<void>(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (_) => false,
+      );
+      return;
+    }
+    await navigator.push<void>(
       MaterialPageRoute<void>(
         builder: (_) =>
             BiometricLockScreen(authenticator: widget.biometricAuthenticator),
       ),
     );
-  }
-
-  void _showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Passkey sign-up will be available soon.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
   }
 }
 

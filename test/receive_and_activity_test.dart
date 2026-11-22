@@ -14,10 +14,16 @@ import 'package:fliq/screens/settings/security_settings_screen.dart';
 import 'package:fliq/screens/settings/settings_screen.dart';
 import 'package:fliq/screens/welcome_screen.dart';
 import 'package:fliq/services/biometric_authenticator.dart';
+import 'package:fliq/services/account_store.dart';
 import 'package:fliq/services/fliq_api.dart';
 
+import 'support/fake_fliq_api.dart';
+
 void main() {
-  setUp(() => FliqApi.instance = _FakeFliqApi());
+  setUp(() {
+    FliqApi.instance = FakeFliqApi();
+    AccountStore.instance = AccountStore();
+  });
 
   testWidgets('pay link shows amount, link and closes the request flow', (
     tester,
@@ -311,9 +317,9 @@ void main() {
     await _reveal(tester, find.text('Live rates, all providers'));
     await tester.tap(find.text('Live rates, all providers'));
     await tester.pumpAndSettle();
-    expect(find.text('1,462.95'), findsOneWidget);
-    expect(find.text('Best of 1 quoting · Paycrest'), findsOneWidget);
-    expect(find.text('₦1,463.43'), findsOneWidget);
+    expect(find.text('1,376.32'), findsOneWidget);
+    expect(find.text('Best of 3 quoting · Paycrest'), findsOneWidget);
+    expect(find.text('₦1,383.20'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('close-live-rates')));
     await tester.pumpAndSettle();
 
@@ -412,9 +418,4 @@ void _usePhoneViewport(WidgetTester tester) {
 class _AlwaysAuthenticates implements BiometricAuthenticator {
   @override
   Future<bool> authenticate() async => true;
-}
-
-class _FakeFliqApi extends FliqApi {
-  @override
-  Future<String> checkHealth() async => '0.1.0';
 }

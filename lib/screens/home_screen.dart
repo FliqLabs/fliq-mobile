@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../data/sample_data.dart';
 import '../models/transaction.dart';
 import '../utils/formatters.dart';
 import '../widgets/fliq_wordmark.dart';
@@ -15,6 +14,11 @@ import 'receive/receive_flow.dart';
 import 'receive/receive_tokens_sheet.dart';
 import 'request_amount_screen.dart';
 import 'settings/settings_screen.dart';
+import 'welcome_screen.dart';
+import '../services/biometric_authenticator.dart';
+import '../models/rate.dart';
+import '../services/fliq_api.dart';
+import '../services/account_store.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,9 +29,33 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _isBalanceVisible = true;
+  final Future<Rate> _rate = FliqApi.instance.getRate();
+
   int _tab = 0; // 0 = Home, 1 = Activity
 
-  List<Transaction> get _transactions => SampleData.transactions;
+  List<Transaction> get _transactions => AccountStore.instance.transactions;
+
+  @override
+  void initState() {
+    super.initState();
+    AccountStore.instance.addListener(_onAccountChanged);
+    AccountStore.instance.refresh();
+  }
+
+  @override
+  void dispose() {
+    AccountStore.instance.removeListener(_onAccountChanged);
+    super.dispose();
+  }
+
+  void _onAccountChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _openTab(int tab) {
+    setState(() => _tab = tab);
+    AccountStore.instance.refresh();
+  }
 
   Future<void> _openTransferMenu() async {
     final action = await TransferActionSheet.show(context);
@@ -88,9 +116,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
                   child: _HomeNavigation(
                     selectedIndex: _tab,
-                    onHome: () => setState(() => _tab = 0),
+                    onHome: () => _openTab(0),
                     onTransfer: _openTransferMenu,
-                    onActivity: () => setState(() => _tab = 1),
+                    onActivity: () => _openTab(1),
                   ),
                 ),
               ],
@@ -102,6 +130,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHome(BuildContext context) {
+    final account = AccountStore.instance;
+    if (account.isSignedIn && account.user != null && !account.user!.hasName) {
+      return const _NameNeeded();
+    }
     final latest = _transactions.isEmpty
         ? null
         : (List.of(
@@ -200,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(width: 4),
                     Text(
                       _isBalanceVisible
-                          ? groupDigits(SampleData.vaultBalanceUsd)
+                          ? groupDigits(AccountStore.instance.balanceUsd)
                           : '••••',
                       key: const ValueKey('vault-balance-amount'),
                       style: const TextStyle(
@@ -225,27 +257,43 @@ class _HomeScreenState extends State<HomeScreen> {
                     borderRadius: BorderRadius.circular(28),
                     border: Border.all(color: const Color(0xFF303030)),
                   ),
-                  child: RichText(
-                    text: TextSpan(
-                      style: const TextStyle(
-                        color: Color(0xFFAAAAAA),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      children: [
-                        const TextSpan(text: r'$1 = '),
-                        TextSpan(
-                          text: formatNaira(SampleData.usdToNgn, decimals: 2),
+                  child: FutureBuilder<Rate>(
+                    future: _rate,
+                    builder: (context, snapshot) {
+                      final String rateText;
+                      final String quotingText;
+                      if (snapshot.hasData) {
+                        final rate = snapshot.data!;
+                        rateText = formatNaira(rate.rate, decimals: 2);
+                        quotingText = ' · ${rate.providersQuoting} quoting';
+                      } else if (snapshot.hasError) {
+                        rateText = 'unavailable';
+                        quotingText = '';
+                      } else {
+                        rateText = '…';
+                        quotingText = '';
+                      }
+                      return RichText(
+                        text: TextSpan(
                           style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFAAAAAA),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
+                          children: [
+                            const TextSpan(text: r'$1 = '),
+                            TextSpan(
+                              text: rateText,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            TextSpan(text: quotingText),
+                          ],
                         ),
-                        TextSpan(
-                          text: ' · ${SampleData.rateProviders.length} quoting',
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -257,7 +305,7 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: _RecentCard(
               transaction: latest,
-              onSeeAll: () => setState(() => _tab = 1),
+              onSeeAll: () => _openTab(1),
             ),
           ),
       ],
@@ -442,6 +490,67 @@ class _NavigationItem extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Shown to a signed-in account that has no fliq name yet.
+class _NameNeeded extends StatelessWidget {
+  const _NameNeeded();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        key: const ValueKey('name-needed'),
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.badge_outlined, color: Colors.white, size: 44),
+          const SizedBox(height: 18),
+          const Text(
+            "This account doesn't have a fliq name yet",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Choosing a fliq name on Android is coming soon. If you already '
+            'have one, sign out and sign in with the email you used for it.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF9A9A9E),
+              fontSize: 15,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 24),
+          OutlinedButton(
+            key: const ValueKey('name-needed-sign-out'),
+            onPressed: () async {
+              final navigator = Navigator.of(context);
+              await AccountStore.instance.signOut();
+              await navigator.pushAndRemoveUntil<void>(
+                MaterialPageRoute(
+                  builder: (_) => const WelcomeScreen(
+                    biometricAuthenticator: LocalBiometricAuthenticator(),
+                  ),
+                ),
+                (_) => false,
+              );
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Color(0xFF3A3A3C)),
+            ),
+            child: const Text('Sign out'),
+          ),
+        ],
       ),
     );
   }

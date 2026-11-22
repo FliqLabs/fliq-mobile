@@ -89,25 +89,44 @@ class ReceiptSheet extends StatelessWidget {
                   value: transaction.statusLabel,
                   valueColor: statusColor(transaction.status),
                 ),
-                _ReceiptRow(label: 'Network', value: transaction.network),
-                _ReceiptRow(
-                  label: 'Reference',
-                  value: shortenAddress(
-                    transaction.reference,
-                    head: 10,
-                    tail: 12,
+                if (transaction.facts case final facts?) ...[
+                  for (final (index, (label, value)) in facts.indexed)
+                    if (value.isNotEmpty)
+                      _ReceiptRow(
+                        label: label,
+                        value: label == 'Reference'
+                            ? shortenAddress(value, head: 10, tail: 12)
+                            : value,
+                        showDivider: index < facts.length - 1,
+                        onTap: label == 'Reference'
+                            ? () => copyWithFeedback(
+                                context,
+                                value,
+                                message: 'Reference copied',
+                              )
+                            : null,
+                      ),
+                ] else ...[
+                  _ReceiptRow(label: 'Network', value: transaction.network),
+                  _ReceiptRow(
+                    label: 'Reference',
+                    value: shortenAddress(
+                      transaction.reference,
+                      head: 10,
+                      tail: 12,
+                    ),
+                    onTap: () => copyWithFeedback(
+                      context,
+                      transaction.reference,
+                      message: 'Reference copied',
+                    ),
                   ),
-                  onTap: () => copyWithFeedback(
-                    context,
-                    transaction.reference,
-                    message: 'Reference copied',
+                  _ReceiptRow(
+                    label: 'Category',
+                    value: transaction.category,
+                    showDivider: false,
                   ),
-                ),
-                _ReceiptRow(
-                  label: 'Category',
-                  value: transaction.category,
-                  showDivider: false,
-                ),
+                ],
               ],
             ),
           ),

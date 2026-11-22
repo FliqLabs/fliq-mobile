@@ -16,10 +16,16 @@ import 'package:fliq/screens/settings/daily_limit_screen.dart';
 import 'package:fliq/screens/settings/settings_screen.dart';
 import 'package:fliq/services/biometric_authenticator.dart';
 import 'package:fliq/widgets/fliq_logo.dart';
+import 'package:fliq/services/account_store.dart';
 import 'package:fliq/services/fliq_api.dart';
 
+import 'support/fake_fliq_api.dart';
+
 void main() {
-  setUp(() => FliqApi.instance = _FakeFliqApi());
+  setUp(() {
+    FliqApi.instance = FakeFliqApi();
+    AccountStore.instance = AccountStore();
+  });
 
   testWidgets('welcome screen shows its copy and account actions', (
     WidgetTester tester,
@@ -37,23 +43,22 @@ void main() {
     expect(find.text('I already have an account'), findsOneWidget);
     expect(find.byType(FliqLogo), findsOneWidget);
 
+    // Passkeys on Android wait on fliq.cash, so sign-up starts with email.
     await tester.tap(find.text('Continue with passkey'));
-    await tester.pump();
-    expect(
-      find.text('Passkey sign-up will be available soon.'),
-      findsOneWidget,
-    );
+    await tester.pumpAndSettle();
+    expect(find.text('Sign in with email'), findsOneWidget);
   });
 
-  testWidgets('existing account opens biometric unlock', (
+  testWidgets('a saved session opens at biometric unlock', (
     WidgetTester tester,
   ) async {
     final authenticator = _FakeBiometricAuthenticator();
+    FliqApi.instance = FakeFliqApi(signedIn: true);
+    await AccountStore.instance.start();
     await tester.pumpWidget(FliqApp(biometricAuthenticator: authenticator));
-
-    await tester.tap(find.text('I already have an account'));
     await tester.pumpAndSettle();
 
+    // A saved session opens straight at the lock screen.
     expect(find.text('fliq is locked'), findsOneWidget);
     expect(find.byKey(const ValueKey('biometric-unlock')), findsOneWidget);
     final wordmark = tester.widget<Text>(
@@ -725,9 +730,4 @@ class _FakeBiometricAuthenticator implements BiometricAuthenticator {
     authenticateCalls++;
     return true;
   }
-}
-
-class _FakeFliqApi extends FliqApi {
-  @override
-  Future<String> checkHealth() async => '0.1.0';
 }

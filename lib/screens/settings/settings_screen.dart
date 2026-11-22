@@ -12,6 +12,7 @@ import 'notification_settings_screen.dart';
 import 'security_settings_screen.dart';
 import 'settings_widgets.dart';
 import '../../services/fliq_api.dart';
+import '../../services/account_store.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -223,8 +224,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     border: Border.all(color: const Color(0xFF333333)),
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: const Text(
-                    '@olayinka05',
+                  child: Text(
+                    '@${AccountStore.instance.handle}',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -312,8 +313,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (signOut != true || !context.mounted) return;
+    final navigator = Navigator.of(context);
+    await AccountStore.instance.signOut();
     // Back to the welcome screen, clearing everything behind it.
-    await Navigator.of(context).pushAndRemoveUntil<void>(
+    await navigator.pushAndRemoveUntil<void>(
       MaterialPageRoute(
         builder: (_) => const WelcomeScreen(
           biometricAuthenticator: LocalBiometricAuthenticator(),
@@ -350,7 +353,7 @@ class _ProfileCard extends StatelessWidget {
                 showCamera: true,
               ),
               const SizedBox(width: 18),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -364,7 +367,7 @@ class _ProfileCard extends StatelessWidget {
                     ),
                     SizedBox(height: 4),
                     Text(
-                      '@olayinka05',
+                      '@${AccountStore.instance.handle}',
                       style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 15),
                     ),
                   ],

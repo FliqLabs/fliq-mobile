@@ -8,6 +8,7 @@ import '../utils/clipboard_share.dart';
 import '../utils/formatters.dart';
 import '../widgets/circle_icon_button.dart';
 import '../widgets/qr_code_card.dart';
+import '../services/account_store.dart';
 
 /// Shown after "Create pay link": a QR code and link anyone can pay.
 ///
@@ -34,7 +35,7 @@ class PayLinkScreen extends StatefulWidget {
 
 class _PayLinkScreenState extends State<PayLinkScreen> {
   late final String _link =
-      '${SampleData.payLinkBase}/${SampleData.handle}/'
+      '${SampleData.payLinkBase}/${AccountStore.instance.handle}/'
       '${widget.linkId ?? _randomId()}';
 
   static String _randomId() {
